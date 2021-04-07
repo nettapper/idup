@@ -1,38 +1,60 @@
 extern crate image;
 
-use image::GenericImageView;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "example", about = "An example of StructOpt usage.")]
+#[structopt(name = "idup", about = "Find duplicate images using avg perceptual hash function")]
 struct Opt {
-    /// Input file
+    /// Image file
     #[structopt(parse(from_os_str))]
     img: PathBuf,
+
+    /// Image file 2
+    #[structopt(parse(from_os_str))]
+    img2: Option<PathBuf>
 }
 
 fn main() {
     let opt = Opt::from_args();
     println!("{:?}", opt);
 
-    let img = image::open(opt.img).expect("test image could not be opened");
+    match opt.img2 {
+        None => {
+            let hash1 = phash(opt.img);
+            println!("img: {}", hash1);
+        },
+        Some(img2) => {
+            let hash1 = phash(opt.img);
+            println!("img1: {}", hash1);
 
-    println!("original dimensions {:?}", img.dimensions());
-    println!("original color {:?}", img.color());
+            let hash2 = phash(img2);
+            println!("img2: {}", hash2);
 
-    let img = img.resize(8, 8, image::imageops::FilterType::Gaussian).into_luma8();
+            let diff = hamming_dist(hash1, hash2);
+            println!("diff: {}", diff);
+        }
+    }
+}
+
+fn phash(fpath: PathBuf) -> u64 {
+    let img = image::open(fpath).expect("test image could not be opened");
+
+    // println!("original dimensions {:?}", img.dimensions());
+    // println!("original color {:?}", img.color());
+
+    let img = img.resize_exact(8, 8, image::imageops::FilterType::Gaussian).into_luma8();
     let (w, h) = img.dimensions();
-    println!("new dimensions {:?}", (w, h));
+    // println!("new dimensions {:?}", (w, h));
 
     let mut total: u32 = 0;
     for p in img.iter() {
         total = total.checked_add(*p as u32).expect("overflow when calculating total");
     }
-    println!("total {:?}", total);
+    // println!("total {:?}", total);
 
     let avg = total / (w * h);
-    println!("average {:?}", avg);
+    // println!("average {:?}", avg);
 
     assert!(w * h == 64);
     // SAFETY this will overflow if width * height is anything over 64 bits
@@ -44,9 +66,7 @@ fn main() {
         }
         average_hash <<= 1;  // shift one from least to most signifigant
     }
-    println!("{}", average_hash);
-
-    // img.save("out.jpg").expect("could not save new image");
+    average_hash
 }
 
 // counts the number of bits that are different
