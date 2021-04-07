@@ -1,13 +1,22 @@
 extern crate image;
 
 use image::GenericImageView;
+use std::path::PathBuf;
+use structopt::StructOpt;
+
+#[derive(Debug, StructOpt)]
+#[structopt(name = "example", about = "An example of StructOpt usage.")]
+struct Opt {
+    /// Input file
+    #[structopt(parse(from_os_str))]
+    img: PathBuf,
+}
 
 fn main() {
-    println!("Hello, world!");
+    let opt = Opt::from_args();
+    println!("{:?}", opt);
 
-    // Use the open function to load an image from a Path.
-    // `open` returns a `DynamicImage` on success.
-    let img = image::open("test.jpg").expect("test image could not be opened");
+    let img = image::open(opt.img).expect("test image could not be opened");
 
     println!("original dimensions {:?}", img.dimensions());
     println!("original color {:?}", img.color());
