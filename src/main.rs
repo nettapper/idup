@@ -20,10 +20,14 @@ fn main() {
     println!("{:?}", opt);
 
     match opt.img2 {
+        // one image as command line arg
+        // calcualte it's phash and print it
         None => {
             let hash1 = phash(opt.img);
             println!("img: {}", hash1);
         },
+        // two images as command line args
+        // calcualte both phashes, and dist
         Some(img2) => {
             let hash1 = phash(opt.img);
             println!("img1: {}", hash1);
