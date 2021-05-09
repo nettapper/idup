@@ -2,6 +2,7 @@ extern crate image;
 
 use std::path::PathBuf;
 use structopt::StructOpt;
+use std::fs::read;
 
 mod hash;
 
@@ -25,17 +26,21 @@ fn main() {
         // one image as command line arg
         // calcualte it's phash and print it
         None => {
-            let ph = hash::phash::hash(opt.img);
+            let img = image::open(&opt.img).expect("Failed to open the file for the perceptual hash");
+            let ph = hash::phash::hash(img);
             println!("phash: {}", ph);
-            let sh = hash::sha512::hash();
+            let data = read(&opt.img).expect("Failed to open the file for the sha512 hash");
+            let sh = hash::sha512::hash(data);
             println!("sha512: {}", sh);
         },
         // two images as command line args
         // calcualte both phashes, and dist
         Some(img2) => {
-            let hash1 = hash::phash::hash(opt.img);
+            let img = image::open(&opt.img).expect("Failed to open the first file for the perceptual hash");
+            let hash1 = hash::phash::hash(img);
             println!("img1: {}", hash1);
 
+            let img2 = image::open(&img2).expect("Failed to open the second file for the perceptual hash");
             let hash2 = hash::phash::hash(img2);
             println!("img2: {}", hash2);
 

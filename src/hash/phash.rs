@@ -1,7 +1,8 @@
-use std::path::PathBuf;
+extern crate image;
 
-pub fn hash(fpath: PathBuf) -> u64 {
-    let img = image::open(fpath).expect("test image could not be opened");
+use image::DynamicImage;
+
+pub fn hash(img: DynamicImage) -> u64 {
 
     // println!("original dimensions {:?}", img.dimensions());
     // println!("original color {:?}", img.color());
