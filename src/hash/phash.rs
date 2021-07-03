@@ -3,17 +3,20 @@ extern crate image;
 use image::DynamicImage;
 
 pub fn hash(img: DynamicImage) -> u64 {
-
     // println!("original dimensions {:?}", img.dimensions());
     // println!("original color {:?}", img.color());
 
-    let img = img.resize_exact(8, 8, image::imageops::FilterType::Gaussian).into_luma8();
+    let img = img
+        .resize_exact(8, 8, image::imageops::FilterType::Gaussian)
+        .into_luma8();
     let (w, h) = img.dimensions();
     // println!("new dimensions {:?}", (w, h));
 
     let mut total: u32 = 0;
     for p in img.iter() {
-        total = total.checked_add(*p as u32).expect("overflow when calculating total");
+        total = total
+            .checked_add(*p as u32)
+            .expect("overflow when calculating total");
     }
     // println!("total {:?}", total);
 
@@ -28,8 +31,7 @@ pub fn hash(img: DynamicImage) -> u64 {
         if *p as u32 > avg {
             average_hash += 1;
         }
-        average_hash <<= 1;  // shift one from least to most signifigant
+        average_hash <<= 1; // shift one from least to most signifigant
     }
     average_hash
 }
-
