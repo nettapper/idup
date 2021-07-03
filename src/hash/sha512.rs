@@ -37,11 +37,21 @@ pub fn hash(mut data: Vec<u8>) -> String {
 
     // Pre-processing (Padding):
     // begin with the original message of length L bits
-    let l = data.len() * 8; // TODO: is there a better way than hardcoding number of bits in u8?
-                            // append a single '1' bit
-                            // append K '0' bits, where K is the minimum number >= 0 such that L + 1 + K + 64 is a multiple of 512
-                            // append L as a 64-bit big-endian integer, making the total post-processed length a multiple of 512 bits
-                            // such that the bits in the message are L 1 00..<K 0's>..00 <L as 64 bit integer> = k*512 total bits
+    // TODO: is there a better way than hardcoding number of bits in u8?
+    let l: u64 = data.len() as u64 * 8;
+    // append a single '1' bit
+    // append K '0' bits, where K is the minimum number >= 0 such that L + 1 + K + 64 is a multiple of 512
+    let mut k = 512 - ((l + 65) % 512);
+    data.push(1_u8 << 3);
+    k = k.saturating_sub(7);
+    while k > 0 {
+        data.push(0);
+        k = k.saturating_sub(8);
+    }
+    // append L as a 64-bit big-endian integer, making the total post-processed length a multiple of 512 bits
+    data.extend_from_slice(&l.to_be_bytes());
+    assert_eq!((data.len() * 8) % 512, 0);
+    // such that the bits in the message are L 1 00..<K 0's>..00 <L as 64 bit integer> = k*512 total bits
 
     // Process the message in successive 512-bit chunks:
     // break message into 512-bit chunks
@@ -113,4 +123,6 @@ mod tests {
         let data = String::from("abc").into_bytes();
         assert_eq!(hash(data), "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f");
     }
+
+    // TODO add a test with multiple chunks
 }
