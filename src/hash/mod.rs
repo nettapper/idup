@@ -1,5 +1,5 @@
 pub mod phash;
-pub mod sha512;
+pub mod sha256;
 
 // counts the number of bits that are different
 pub fn hamming_dist(mut a: u64, mut b: u64) -> u8 {

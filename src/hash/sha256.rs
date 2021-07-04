@@ -55,6 +55,8 @@ pub fn hash(mut data: Vec<u8>) -> String {
 
     // Process the message in successive 512-bit chunks:
     // break message into 512-bit chunks
+    let mut start = 0;
+    let step = 512;
     // for each chunk
     //     create a 64-entry message schedule array w[0..63] of 32-bit words
     //     (The initial values in w[0..63] don't matter, so many implementations zero them here)
@@ -106,7 +108,12 @@ pub fn hash(mut data: Vec<u8>) -> String {
 
     // Produce the final hash value (big-endian):
     // digest := hash := h0 append h1 append h2 append h3 append h4 append h5 append h6 append h7
-    return String::new();
+    // TODO this formatting might need to be modified
+    let digest = format!(
+        "{:x}{:x}{:x}{:x}{:x}{:x}{:x}{:x}",
+        h0, h1, h2, h3, h4, h5, h6, h7
+    );
+    return digest;
 }
 
 #[cfg(test)]
@@ -115,13 +122,20 @@ mod tests {
 
     #[test]
     fn test_empty() {
-        assert_eq!(hash(Vec::new()), "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e");
+        let data = String::from("").into_bytes();
+        assert_eq!(
+            hash(data),
+            "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+        );
     }
 
     #[test]
     fn test_abcs() {
         let data = String::from("abc").into_bytes();
-        assert_eq!(hash(data), "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f");
+        assert_eq!(
+            hash(data),
+            "edeaaff3f1774ad2888673770c6d64097e391bc362d7d6fb34982ddf0efd18cb"
+        );
     }
 
     // TODO add a test with multiple chunks

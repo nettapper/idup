@@ -33,9 +33,9 @@ fn main() {
                 image::open(&opt.img).expect("Failed to open the file for the perceptual hash");
             let ph = hash::phash::hash(img);
             println!("phash: {}", ph);
-            let data = read(&opt.img).expect("Failed to open the file for the sha512 hash");
-            let sh = hash::sha512::hash(data);
-            println!("sha512: {}", sh);
+            let data = read(&opt.img).expect("Failed to open the file for the sha256 hash");
+            let sh = hash::sha256::hash(data);
+            println!("sha265: {}", sh);
         }
         // two images as command line args
         // calcualte both phashes, and dist
