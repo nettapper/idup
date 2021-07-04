@@ -7,7 +7,7 @@ pub fn hash(mut data: Vec<u8>) -> String {
     // and when parsing message block data from bytes to words, for example,
     // the first word of the input message "abc" after padding is 0x61626380
 
-    // TODO do I need to u32::to_be(0x6a...) for all constants?
+    // TODO do I need to u32::from_be(0x6a...) for all constants?
 
     // Initialize hash values:
     // (first 32 bits of the fractional parts of the square roots of the first 8 primes 2..19):
@@ -55,56 +55,69 @@ pub fn hash(mut data: Vec<u8>) -> String {
 
     // Process the message in successive 512-bit chunks:
     // break message into 512-bit chunks
-    let mut start = 0;
-    let step = 512;
+    let step = 512 / 8;
     // for each chunk
-    //     create a 64-entry message schedule array w[0..63] of 32-bit words
-    //     (The initial values in w[0..63] don't matter, so many implementations zero them here)
-    //     copy chunk into first 16 words w[0..15] of the message schedule array
+    for chunk in data.chunks(step) {
+        // each chunk should be 64 u8 = 16 u32
+        assert_eq!(chunk.len(), 64);
+        // create a 64-entry message schedule array w[0..63] of 32-bit words
+        // (The initial values in w[0..63] don't matter, so many implementations zero them here)
+        let mut w: [u32; 64] = [0; 64];
+        //     copy chunk into first 16 words w[0..15] of the message schedule array
+        for (i, arr) in (0..).zip(chunk.chunks(4)) {
+            // println!("{:#} {:#?}", i, arr);
+            // TODO ensure word is big endian
+            let word: u32 = ((arr[0] as u32) << 24)
+                + ((arr[1] as u32) << 16)
+                + ((arr[2] as u32) << 8)
+                + (arr[3] as u32);
+            w[i] = word;
+        }
 
-    //     Extend the first 16 words into the remaining 48 words w[16..63] of the message schedule array:
-    //     for i from 16 to 63
-    //         s0 := (w[i-15] rightrotate  7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift  3)
-    //         s1 := (w[i- 2] rightrotate 17) xor (w[i- 2] rightrotate 19) xor (w[i- 2] rightshift 10)
-    //         w[i] := w[i-16] + s0 + w[i-7] + s1
+        // Extend the first 16 words into the remaining 48 words w[16..63] of the message schedule array:
+        // for i from 16 to 63
+        //     s0 := (w[i-15] rightrotate  7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift  3)
+        //     s1 := (w[i- 2] rightrotate 17) xor (w[i- 2] rightrotate 19) xor (w[i- 2] rightshift 10)
+        //     w[i] := w[i-16] + s0 + w[i-7] + s1
 
-    //     Initialize working variables to current hash value:
-    //     a := h0
-    //     b := h1
-    //     c := h2
-    //     d := h3
-    //     e := h4
-    //     f := h5
-    //     g := h6
-    //     h := h7
+        // Initialize working variables to current hash value:
+        // a := h0
+        // b := h1
+        // c := h2
+        // d := h3
+        // e := h4
+        // f := h5
+        // g := h6
+        // h := h7
 
-    //     Compression function main loop:
-    //     for i from 0 to 63
-    //         S1 := (e rightrotate 6) xor (e rightrotate 11) xor (e rightrotate 25)
-    //         ch := (e and f) xor ((not e) and g)
-    //         temp1 := h + S1 + ch + k[i] + w[i]
-    //         S0 := (a rightrotate 2) xor (a rightrotate 13) xor (a rightrotate 22)
-    //         maj := (a and b) xor (a and c) xor (b and c)
-    //         temp2 := S0 + maj
+        // Compression function main loop:
+        // for i from 0 to 63
+        //     S1 := (e rightrotate 6) xor (e rightrotate 11) xor (e rightrotate 25)
+        //     ch := (e and f) xor ((not e) and g)
+        //     temp1 := h + S1 + ch + k[i] + w[i]
+        //     S0 := (a rightrotate 2) xor (a rightrotate 13) xor (a rightrotate 22)
+        //     maj := (a and b) xor (a and c) xor (b and c)
+        //     temp2 := S0 + maj
 
-    //         h := g
-    //         g := f
-    //         f := e
-    //         e := d + temp1
-    //         d := c
-    //         c := b
-    //         b := a
-    //         a := temp1 + temp2
+        //     h := g
+        //     g := f
+        //     f := e
+        //     e := d + temp1
+        //     d := c
+        //     c := b
+        //     b := a
+        //     a := temp1 + temp2
 
-    //     Add the compressed chunk to the current hash value:
-    //     h0 := h0 + a
-    //     h1 := h1 + b
-    //     h2 := h2 + c
-    //     h3 := h3 + d
-    //     h4 := h4 + e
-    //     h5 := h5 + f
-    //     h6 := h6 + g
-    //     h7 := h7 + h
+        // Add the compressed chunk to the current hash value:
+        // h0 := h0 + a
+        // h1 := h1 + b
+        // h2 := h2 + c
+        // h3 := h3 + d
+        // h4 := h4 + e
+        // h5 := h5 + f
+        // h6 := h6 + g
+        // h7 := h7 + h
+    }
 
     // Produce the final hash value (big-endian):
     // digest := hash := h0 append h1 append h2 append h3 append h4 append h5 append h6 append h7
