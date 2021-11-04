@@ -11,14 +11,14 @@ pub fn hash(mut data: Vec<u8>) -> String {
 
     // Initialize hash values:
     // (first 32 bits of the fractional parts of the square roots of the first 8 primes 2..19):
-    let h0: u32 = 0x6a09e667;
-    let h1: u32 = 0xbb67ae85;
-    let h2: u32 = 0x3c6ef372;
-    let h3: u32 = 0xa54ff53a;
-    let h4: u32 = 0x510e527f;
-    let h5: u32 = 0x9b05688c;
-    let h6: u32 = 0x1f83d9ab;
-    let h7: u32 = 0x5be0cd19;
+    let mut h0: u32 = 0x6a09e667;
+    let mut h1: u32 = 0xbb67ae85;
+    let mut h2: u32 = 0x3c6ef372;
+    let mut h3: u32 = 0xa54ff53a;
+    let mut h4: u32 = 0x510e527f;
+    let mut h5: u32 = 0x9b05688c;
+    let mut h6: u32 = 0x1f83d9ab;
+    let mut h7: u32 = 0x5be0cd19;
 
     // Initialize array of round constants:
     // (first 32 bits of the fractional parts of the cube roots of the first 64 primes 2..311):
@@ -41,12 +41,12 @@ pub fn hash(mut data: Vec<u8>) -> String {
     let l: u64 = data.len() as u64 * 8;
     // append a single '1' bit
     // append K '0' bits, where K is the minimum number >= 0 such that L + 1 + K + 64 is a multiple of 512
-    let mut k = 512 - ((l + 65) % 512);
+    let mut j = 512 - ((l + 65) % 512);  // 'j' to not shadow k
     data.push(1_u8 << 3);
-    k = k.saturating_sub(7);
-    while k > 0 {
+    j = j.saturating_sub(7);
+    while j > 0 {
         data.push(0);
-        k = k.saturating_sub(8);
+        j = j.saturating_sub(8);
     }
     // append L as a 64-bit big-endian integer, making the total post-processed length a multiple of 512 bits
     data.extend_from_slice(&l.to_be_bytes());
@@ -75,48 +75,60 @@ pub fn hash(mut data: Vec<u8>) -> String {
         }
 
         // Extend the first 16 words into the remaining 48 words w[16..63] of the message schedule array:
-        // for i from 16 to 63
-        //     s0 := (w[i-15] rightrotate  7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift  3)
-        //     s1 := (w[i- 2] rightrotate 17) xor (w[i- 2] rightrotate 19) xor (w[i- 2] rightshift 10)
-        //     w[i] := w[i-16] + s0 + w[i-7] + s1
+        for i in 16..63 {
+            // s0 := (w[i-15] rightrotate  7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift  3)
+            let s0: u32 = w[i-15].rotate_right(7) ^ w[i-15].rotate_right(18) ^ (w[i-15] >> 3);
+            // s1 := (w[i- 2] rightrotate 17) xor (w[i- 2] rightrotate 19) xor (w[i- 2] rightshift 10)
+            let s1: u32 = w[i-2].rotate_right(17) ^ w[i-2].rotate_right(19) ^ (w[i-2] >> 10);
+            // w[i] := w[i-16] + s0 + w[i-7] + s1
+            w[i] = w[i-16].overflowing_add(s0).0.overflowing_add(s0).0.overflowing_add(w[i-7]).0.overflowing_add(s1).0;
+        }
 
         // Initialize working variables to current hash value:
-        // a := h0
-        // b := h1
-        // c := h2
-        // d := h3
-        // e := h4
-        // f := h5
-        // g := h6
-        // h := h7
+        let mut a = h0;
+        let mut b = h1;
+        let mut c = h2;
+        let mut d = h3;
+        let mut e = h4;
+        let mut f = h5;
+        let mut g = h6;
+        let mut h = h7;
 
         // Compression function main loop:
         // for i from 0 to 63
-        //     S1 := (e rightrotate 6) xor (e rightrotate 11) xor (e rightrotate 25)
-        //     ch := (e and f) xor ((not e) and g)
-        //     temp1 := h + S1 + ch + k[i] + w[i]
-        //     S0 := (a rightrotate 2) xor (a rightrotate 13) xor (a rightrotate 22)
-        //     maj := (a and b) xor (a and c) xor (b and c)
-        //     temp2 := S0 + maj
+        for i in 0..63 {
+            // S1 := (e rightrotate 6) xor (e rightrotate 11) xor (e rightrotate 25)
+            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+            // ch := (e and f) xor ((not e) and g)
+            let ch = (e & f) & ((!e) & g);
+            // temp1 := h + S1 + ch + k[i] + w[i]
+            let temp1 = h.overflowing_add(s1).0.overflowing_add(ch).0.overflowing_add(k[i]).0.overflowing_add(w[i]).0;
+            // S0 := (a rightrotate 2) xor (a rightrotate 13) xor (a rightrotate 22)
+            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+            // maj := (a and b) xor (a and c) xor (b and c)
+            let maj = (a & b) ^ (a & c) ^ (b ^ c);
+            // temp2 := S0 + maj
+            let temp2 = s0.overflowing_add(maj).0;
 
-        //     h := g
-        //     g := f
-        //     f := e
-        //     e := d + temp1
-        //     d := c
-        //     c := b
-        //     b := a
-        //     a := temp1 + temp2
+            h = g;
+            g = f;
+            f = e;
+            e = d.overflowing_add(temp1).0;
+            d = c;
+            c = b;
+            b = a;
+            a = temp1.overflowing_add(temp2).0;
+        }
 
         // Add the compressed chunk to the current hash value:
-        // h0 := h0 + a
-        // h1 := h1 + b
-        // h2 := h2 + c
-        // h3 := h3 + d
-        // h4 := h4 + e
-        // h5 := h5 + f
-        // h6 := h6 + g
-        // h7 := h7 + h
+        h0 = h0.overflowing_add(a).0;
+        h1 = h1.overflowing_add(b).0;
+        h2 = h2.overflowing_add(c).0;
+        h3 = h3.overflowing_add(d).0;
+        h4 = h4.overflowing_add(e).0;
+        h5 = h5.overflowing_add(f).0;
+        h6 = h6.overflowing_add(g).0;
+        h7 = h7.overflowing_add(h).0;
     }
 
     // Produce the final hash value (big-endian):
