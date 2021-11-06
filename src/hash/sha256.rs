@@ -23,49 +23,53 @@ pub fn hash(mut data: Vec<u8>) -> String {
     // Initialize array of round constants:
     // (first 32 bits of the fractional parts of the cube roots of the first 64 primes 2..311):
     let k: [u32; 64] = [
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
-        0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
-        0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
-        0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
-        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
-        0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
-        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
-        0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
-        0xc67178f2,
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
     ];
 
+
+    println!("pre data: {:?}", data);
     // Pre-processing (Padding):
     // begin with the original message of length L bits
     // TODO: is there a better way than hardcoding number of bits in u8?
     let l: u64 = data.len() as u64 * 8;
+    println!("l: {:?}", l);
     // append a single '1' bit
+    data.push(1_u8 << 7);
     // append K '0' bits, where K is the minimum number >= 0 such that L + 1 + K + 64 is a multiple of 512
-    let mut j = 512 - ((l + 65) % 512);  // 'j' to not shadow k
-    data.push(1_u8 << 3);
-    j = j.saturating_sub(7);
-    while j > 0 {
+    let mut j = 512 - ((l + 64 + 8) % 512);  // var 'j' to not shadow k, +8 for u8 above
+    if j == 512 { j = 0; } // case where no other zeros are needed
+    println!("j (K): {:?}", j);
+    while j >= 8 {
         data.push(0);
         j = j.saturating_sub(8);
     }
     // append L as a 64-bit big-endian integer, making the total post-processed length a multiple of 512 bits
     data.extend_from_slice(&l.to_be_bytes());
+    println!("post data (len {:?}): {:?}", data.len(), data);
     assert_eq!((data.len() * 8) % 512, 0);
     // such that the bits in the message are L 1 00..<K 0's>..00 <L as 64 bit integer> = k*512 total bits
 
     // Process the message in successive 512-bit chunks:
     // break message into 512-bit chunks
-    let step = 512 / 8;
+    let num_of_u8s = 512 / 8;
     // for each chunk
-    for chunk in data.chunks(step) {
+    for chunk in data.chunks(num_of_u8s) {
+        println!("chunk (len {:?}): {:?}", chunk.len(), chunk);
         // each chunk should be 64 u8 = 16 u32
         assert_eq!(chunk.len(), 64);
         // create a 64-entry message schedule array w[0..63] of 32-bit words
         // (The initial values in w[0..63] don't matter, so many implementations zero them here)
         let mut w: [u32; 64] = [0; 64];
-        //     copy chunk into first 16 words w[0..15] of the message schedule array
+        // copy current chunk into first 16 words w[0..15] of the message schedule array
         for (i, arr) in (0..).zip(chunk.chunks(4)) {
-            // println!("{:#} {:#?}", i, arr);
+            println!("{:#} {:#?}", i, arr);
             // TODO ensure word is big endian
             let word: u32 = ((arr[0] as u32) << 24)
                 + ((arr[1] as u32) << 16)
@@ -73,15 +77,16 @@ pub fn hash(mut data: Vec<u8>) -> String {
                 + (arr[3] as u32);
             w[i] = word;
         }
+        println!("w (len {:?}): {:?}", w.len(), w);
 
         // Extend the first 16 words into the remaining 48 words w[16..63] of the message schedule array:
-        for i in 16..63 {
+        for i in 16..64 {
             // s0 := (w[i-15] rightrotate  7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift  3)
             let s0: u32 = w[i-15].rotate_right(7) ^ w[i-15].rotate_right(18) ^ (w[i-15] >> 3);
             // s1 := (w[i- 2] rightrotate 17) xor (w[i- 2] rightrotate 19) xor (w[i- 2] rightshift 10)
             let s1: u32 = w[i-2].rotate_right(17) ^ w[i-2].rotate_right(19) ^ (w[i-2] >> 10);
             // w[i] := w[i-16] + s0 + w[i-7] + s1
-            w[i] = w[i-16].overflowing_add(s0).0.overflowing_add(s0).0.overflowing_add(w[i-7]).0.overflowing_add(s1).0;
+            w[i] = w[i-16].overflowing_add(s0).0.overflowing_add(w[i-7]).0.overflowing_add(s1).0;
         }
 
         // Initialize working variables to current hash value:
@@ -96,17 +101,17 @@ pub fn hash(mut data: Vec<u8>) -> String {
 
         // Compression function main loop:
         // for i from 0 to 63
-        for i in 0..63 {
+        for i in 0..64 {
             // S1 := (e rightrotate 6) xor (e rightrotate 11) xor (e rightrotate 25)
             let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
             // ch := (e and f) xor ((not e) and g)
-            let ch = (e & f) & ((!e) & g);
+            let ch = (e & f) ^ ((!e) & g);
             // temp1 := h + S1 + ch + k[i] + w[i]
             let temp1 = h.overflowing_add(s1).0.overflowing_add(ch).0.overflowing_add(k[i]).0.overflowing_add(w[i]).0;
             // S0 := (a rightrotate 2) xor (a rightrotate 13) xor (a rightrotate 22)
             let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
             // maj := (a and b) xor (a and c) xor (b and c)
-            let maj = (a & b) ^ (a & c) ^ (b ^ c);
+            let maj = (a & b) ^ (a & c) ^ (b & c);
             // temp2 := S0 + maj
             let temp2 = s0.overflowing_add(maj).0;
 
@@ -157,9 +162,20 @@ mod tests {
     #[test]
     fn test_abcs() {
         let data = String::from("abc").into_bytes();
+        // println!("{:?}", data);
         assert_eq!(
             hash(data),
             "edeaaff3f1774ad2888673770c6d64097e391bc362d7d6fb34982ddf0efd18cb"
+        );
+    }
+
+    #[test]
+    fn test_abcs_repeat() {
+        let data = String::from("aaaabbbbcccc").into_bytes();
+        // println!("{:?}", data);
+        assert_eq!(
+            hash(data),
+            "90fe7c60f22c46f810c6324977fe28277fe5b5febab62d815a5bdf7abde6073e"
         );
     }
 
