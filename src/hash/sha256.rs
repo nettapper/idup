@@ -34,25 +34,25 @@ pub fn hash(mut data: Vec<u8>) -> String {
     ];
 
 
-    println!("pre data: {:?}", data);
+    // println!("pre data: {:?}", data);
     // Pre-processing (Padding):
     // begin with the original message of length L bits
     // TODO: is there a better way than hardcoding number of bits in u8?
     let l: u64 = data.len() as u64 * 8;
-    println!("l: {:?}", l);
+    // println!("l: {:?}", l);
     // append a single '1' bit
     data.push(1_u8 << 7);
     // append K '0' bits, where K is the minimum number >= 0 such that L + 1 + K + 64 is a multiple of 512
     let mut j = 512 - ((l + 64 + 8) % 512);  // var 'j' to not shadow k, +8 for u8 above
     if j == 512 { j = 0; } // case where no other zeros are needed
-    println!("j (K): {:?}", j);
+    // println!("j (K): {:?}", j);
     while j >= 8 {
         data.push(0);
         j = j.saturating_sub(8);
     }
     // append L as a 64-bit big-endian integer, making the total post-processed length a multiple of 512 bits
     data.extend_from_slice(&l.to_be_bytes());
-    println!("post data (len {:?}): {:?}", data.len(), data);
+    // println!("post data (len {:?}): {:?}", data.len(), data);
     assert_eq!((data.len() * 8) % 512, 0);
     // such that the bits in the message are L 1 00..<K 0's>..00 <L as 64 bit integer> = k*512 total bits
 
@@ -61,7 +61,7 @@ pub fn hash(mut data: Vec<u8>) -> String {
     let num_of_u8s = 512 / 8;
     // for each chunk
     for chunk in data.chunks(num_of_u8s) {
-        println!("chunk (len {:?}): {:?}", chunk.len(), chunk);
+        // println!("chunk (len {:?}): {:?}", chunk.len(), chunk);
         // each chunk should be 64 u8 = 16 u32
         assert_eq!(chunk.len(), 64);
         // create a 64-entry message schedule array w[0..63] of 32-bit words
@@ -69,15 +69,15 @@ pub fn hash(mut data: Vec<u8>) -> String {
         let mut w: [u32; 64] = [0; 64];
         // copy current chunk into first 16 words w[0..15] of the message schedule array
         for (i, arr) in (0..).zip(chunk.chunks(4)) {
-            println!("{:#} {:#?}", i, arr);
             // TODO ensure word is big endian
             let word: u32 = ((arr[0] as u32) << 24)
                 + ((arr[1] as u32) << 16)
                 + ((arr[2] as u32) << 8)
                 + (arr[3] as u32);
+            // println!("{:#} {:#?} {:#x}", i, arr, word);
             w[i] = word;
         }
-        println!("w (len {:?}): {:?}", w.len(), w);
+        // println!("w (len {:?}): {:?}", w.len(), w);
 
         // Extend the first 16 words into the remaining 48 words w[16..63] of the message schedule array:
         for i in 16..64 {
@@ -138,9 +138,9 @@ pub fn hash(mut data: Vec<u8>) -> String {
 
     // Produce the final hash value (big-endian):
     // digest := hash := h0 append h1 append h2 append h3 append h4 append h5 append h6 append h7
-    // TODO this formatting might need to be modified
+    // :08x for min of 8 chars to printed in hexadecimal (2 chars per byte & 4 bytes in u32 => 2*4)
     let digest = format!(
-        "{:x}{:x}{:x}{:x}{:x}{:x}{:x}{:x}",
+        "{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}",
         h0, h1, h2, h3, h4, h5, h6, h7
     );
     return digest;
@@ -150,34 +150,55 @@ pub fn hash(mut data: Vec<u8>) -> String {
 mod tests {
     use super::*;
 
+    // NOTE: be careful when generating test data as EOL will change the hash
+    // echo -n  "abc" | sha256sum
+
     #[test]
     fn test_empty() {
         let data = String::from("").into_bytes();
         assert_eq!(
             hash(data),
-            "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         );
     }
 
     #[test]
     fn test_abcs() {
         let data = String::from("abc").into_bytes();
-        // println!("{:?}", data);
         assert_eq!(
             hash(data),
-            "edeaaff3f1774ad2888673770c6d64097e391bc362d7d6fb34982ddf0efd18cb"
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
     }
 
     #[test]
     fn test_abcs_repeat() {
         let data = String::from("aaaabbbbcccc").into_bytes();
-        // println!("{:?}", data);
         assert_eq!(
             hash(data),
-            "90fe7c60f22c46f810c6324977fe28277fe5b5febab62d815a5bdf7abde6073e"
+            "11c85195ae99540ac07f80e2905e6e39aaefc4ac94cd380f366e79ba83560566"
         );
     }
 
-    // TODO add a test with multiple chunks
+    #[test]
+    fn test_multiple_chunks() {
+        // 10 1's, then 10 2's, then ..., then 10 7's
+        // 70 byes = 70 * 8 = 560 bits > 512 bit chunk size
+        let data = String::from("1111111111222222222233333333334444444444555555555566666666667777777777").into_bytes();
+        assert_eq!(
+            hash(data),
+            "7c3bfca2e1355c1dd2c1343e490625b4a59a5c0aefb9d2177a55a6f5d464f369"
+        );
+    }
+
+    #[test]
+    fn test_exactly_one_chunk() {
+        // 512 bits (chunk size) - 64 bits (for the u64 len) - 8 bits (for the append 1 bit) = 440 bits
+        // so I'll add 440 / 8 = 55 ascii a's
+        let data: Vec<u8> = [97].repeat(55);
+        assert_eq!(
+            hash(data),
+            "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318"
+        );
+    }
 }
