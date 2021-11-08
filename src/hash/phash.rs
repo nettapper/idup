@@ -31,7 +31,7 @@ pub fn hash(img: DynamicImage) -> u64 {
         if *p as u32 > avg {
             average_hash += 1;
         }
-        average_hash <<= 1; // shift one from least to most signifigant
+        average_hash <<= 1; // shift one from least to most significant
     }
     average_hash
 }

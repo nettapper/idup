@@ -29,7 +29,7 @@ mod tests {
         let x = 0x8f8f978589f9f1c0; // last 4 bits are 0's
         let y = x + 1;
         assert_eq!(hamming_dist(x, y), 1);
-        let z = x + 8; // any pow of 2 should only change on bit (assming no carry bit)
+        let z = x + 8; // any pow of 2 should only change on bit (assuming no carry bit)
         assert_eq!(hamming_dist(x, z), 1);
     }
 }
