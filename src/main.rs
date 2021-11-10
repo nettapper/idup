@@ -1,6 +1,6 @@
 extern crate image;
 
-use std::fs::read;
+use std::fs::{metadata, read, read_dir};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -19,6 +19,7 @@ enum Opt {
         path: PathBuf,
         #[structopt(short, long)]
         recursive: bool,
+        // TODO should I add follow symlink opt (it looks to be a nightly feature right now)
     },
     /// Retrieve duplicates or near duplicates from the db
     List,
@@ -75,6 +76,34 @@ fn main() {
 
             let diff = hash::hamming_dist(hash1, hash2);
             println!("diff: {}", diff);
+        }
+
+        // Find & store hashes into db
+        Opt::Scan{ path, recursive } => {
+            let meta = metadata(&path).expect("Failed to look up file metadata");
+            if meta.is_dir() {
+                let mut stack: Vec<PathBuf> = Vec::new();
+                stack.push(path);
+
+                while !stack.is_empty() {
+                    let curr_dir = stack.pop().unwrap();
+                    for entry in read_dir(&curr_dir).unwrap() {
+                        let path = entry.unwrap().path();
+                        if path.is_dir() {
+                            println!("dir={}", path.to_str().unwrap_or("cannot print path due to non-UTF8 chars"));
+                            stack.push(path);
+                        } else {
+                            println!("file={}", path.to_str().unwrap_or("cannot print path due to non-UTF8 chars"));
+                            let data = read(&path).expect("Failed to open the file for the sha256 hash");
+                            let sh = hash::sha256::hash(data);
+                            println!("\tsha256: {}", sh);
+                        }
+                    }
+                }
+            } else {
+                println!("file={}", path.to_str().unwrap_or("cannot print path due to non-UTF8 chars"));
+            }
+
         }
 
         _ => {
