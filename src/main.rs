@@ -1,6 +1,5 @@
 extern crate image;
 
-use std::fs::read;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -54,25 +53,18 @@ fn main() {
         // calculate it's phash and print it
         Opt::Info{ file } => {
             // TODO I need better error handling
-            let img =
-                image::open(&file).expect("Failed to open the file for the perceptual hash");
-            let ph = hash::phash::hash(img);
+            let ph = hash::phash::hash_path(&file);
             println!("phash: {}", ph);
-            let data = read(&file).expect("Failed to open the file for the sha256 hash");
-            let sh = hash::sha256::hash(data);
+            let sh = hash::sha256::hash_path(&file);
             println!("sha256: {}", sh);
         }
 
         // calculate both phashes, and dist
         Opt::Compare{ img1, img2 } => {
-            let img = image::open(&img1)
-                .expect("Failed to open the first file for the perceptual hash");
-            let hash1 = hash::phash::hash(img);
+            let hash1 = hash::phash::hash_path(&img1);
             println!("img1: {}", hash1);
 
-            let img2 =
-                image::open(&img2).expect("Failed to open the second file for the perceptual hash");
-            let hash2 = hash::phash::hash(img2);
+            let hash2 = hash::phash::hash_path(&img2);
             println!("img2: {}", hash2);
 
             let diff = hash::hamming_dist(hash1, hash2);

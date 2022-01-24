@@ -1,6 +1,10 @@
-extern crate image;
-
 use image::DynamicImage;
+use std::path::PathBuf;
+
+pub fn hash_path(path: &PathBuf) -> u64 {
+    let img = image::open(path).expect("Failed to open the file for the perceptual hash");
+    return hash(img);
+}
 
 pub fn hash(img: DynamicImage) -> u64 {
     // println!("original dimensions {:?}", img.dimensions());

@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::fs::{read, read_dir};
+use std::fs::read_dir;
 use infer::{get_from_path, MatcherType};
 
 use crate::hash;
@@ -22,9 +22,9 @@ pub fn process_path(path: PathBuf, recursive: bool) {
         } else {
             let file_name = curr.to_str().unwrap_or("cannot print path due to non-UTF8 chars");
             if is_img(&curr).unwrap_or(false) {
-                let data = read(&curr).expect("Failed to open the file for the sha256 hash");
-                let sh = hash::sha256::hash(data);
-                println!("file={} sha256={}", file_name, sh);
+                let sh = hash::sha256::hash_path(&curr);
+                let ph = hash::phash::hash_path(&curr);
+                println!("file={} sha256={} phash={}", file_name, sh, ph);
             } else {
                 println!("skipping file={}", file_name);
             }

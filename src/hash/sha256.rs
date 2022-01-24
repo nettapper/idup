@@ -1,3 +1,11 @@
+use std::fs::read;
+use std::path::PathBuf;
+
+pub fn hash_path(path: &PathBuf) -> String {
+    let data = read(path).expect("Failed to open the file for the sha256 hash");
+    return hash(data);
+}
+
 // Pseudocode taken from [Wikipedia](https://en.wikipedia.org/wiki/SHA-2#Pseudocode)
 pub fn hash(mut data: Vec<u8>) -> String {
     // Note 1: All variables are 32 bit unsigned integers and addition is calculated modulo 2^32
