@@ -1,9 +1,9 @@
 use image::DynamicImage;
-use std::path::PathBuf;
+use std::path::Path;
 
-pub fn hash_path(path: &PathBuf) -> u64 {
+pub fn hash_path(path: &Path) -> u64 {
     let img = image::open(path).expect("Failed to open the file for the perceptual hash");
-    return hash(img);
+    hash(img)
 }
 
 pub fn hash(img: DynamicImage) -> u64 {

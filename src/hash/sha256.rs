@@ -1,9 +1,9 @@
 use std::fs::read;
-use std::path::PathBuf;
+use std::path::Path;
 
-pub fn hash_path(path: &PathBuf) -> String {
+pub fn hash_path(path: &Path) -> String {
     let data = read(path).expect("Failed to open the file for the sha256 hash");
-    return hash(data);
+    hash(data)
 }
 
 // Pseudocode taken from [Wikipedia](https://en.wikipedia.org/wiki/SHA-2#Pseudocode)
@@ -151,7 +151,7 @@ pub fn hash(mut data: Vec<u8>) -> String {
         "{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}",
         h0, h1, h2, h3, h4, h5, h6, h7
     );
-    return digest;
+    digest
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::fs::read_dir;
 use infer::{get_from_path, MatcherType};
 
@@ -12,7 +12,7 @@ pub fn process_path(path: PathBuf, recursive: bool) {
         let curr = stack.pop().expect("Failed to process item becuase the stack is empty");
         if curr.is_dir() {
             if recursive {
-                for entry in read_dir(&curr).expect(format!("Failed to read contents of dir={:?}", &curr).as_str()) {
+                for entry in read_dir(&curr).unwrap_or_else(|_| panic!("Failed to read contents of dir={:?}", &curr)) {
                     match entry {
                         Ok(path_buf) => stack.push(path_buf.path()),
                         Err(err) => println!("Cannot process entry with err={}", err),
@@ -32,8 +32,7 @@ pub fn process_path(path: PathBuf, recursive: bool) {
     }
 }
 
-fn is_img(path: &PathBuf) -> Option<bool> {
-    return Some(get_from_path(path).ok()??
-        .matcher_type() == MatcherType::Image);
-
+fn is_img(path: &Path) -> Option<bool> {
+    Some(get_from_path(path).ok()??
+        .matcher_type() == MatcherType::Image)
 }
