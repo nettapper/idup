@@ -3,10 +3,12 @@ use std::fs::read_dir;
 use infer::{get_from_path, MatcherType};
 
 use crate::hash;
+use crate::db;
 
 pub fn process_path(path: PathBuf, recursive: bool) {
     let mut stack: Vec<PathBuf> = Vec::new();
-    stack.push(path);
+    // SAFETY: all paths passed to db::save need to be absolute
+    stack.push(path.canonicalize().unwrap());
 
     while !stack.is_empty() {
         let curr = stack.pop().expect("Failed to process item becuase the stack is empty");
@@ -24,7 +26,9 @@ pub fn process_path(path: PathBuf, recursive: bool) {
             if is_img(&curr).unwrap_or(false) {
                 let sh = hash::sha256::hash_path(&curr);
                 let ph = hash::phash::hash_path(&curr);
+                // TODO can i use some logging lib everywhere?
                 println!("file={} sha256={} phash={}", file_name, sh, ph);
+                db::save(&file_name, &sh, ph);
             } else {
                 println!("skipping file={}", file_name);
             }

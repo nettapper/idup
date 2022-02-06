@@ -1,10 +1,9 @@
-extern crate image;
-
 use std::path::PathBuf;
 use structopt::StructOpt;
 
 mod hash;
 mod scan;
+mod db;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
