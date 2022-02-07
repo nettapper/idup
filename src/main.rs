@@ -21,7 +21,11 @@ enum Opt {
         // TODO should I add follow symlink opt (it looks to be a nightly feature right now)
     },
     /// Retrieve duplicates or near duplicates from the db
-    List,
+    List {
+        /// File or folder
+        #[structopt(parse(from_os_str))]
+        path: Option<PathBuf>,
+    },
     /// Clean outdated data in the db
     Clean,
     /// Recompute hashes of files in db
@@ -73,6 +77,29 @@ fn main() {
         // Find & store hashes into db
         Opt::Scan{ path, recursive } => {
             scan::process_path(path, recursive);
+        }
+
+        // List matches of file
+        Opt::List{ path } => {
+            // TODO future features
+            // - if dir, find all matches that fall under the parent
+            // - if file, find all matches for that file
+            // - if no path given, find all matches in db
+            // - optins to do exact match (sha256) or fuzzy (phash)
+            match path {
+                None => {
+                    let iter = db::exact_matches().unwrap();
+                    for data in iter {
+                        println!("{:?}", data.path);
+                    }
+                },
+                Some(path) => {
+                    let iter = db::exact_match(&path).unwrap();
+                    for data in iter {
+                        println!("{:?}", data.path);
+                    }
+                }
+            }
         }
 
         _ => {
