@@ -28,7 +28,12 @@ pub fn process_path(path: PathBuf, recursive: bool) {
                 let ph = hash::phash::hash_path(&curr);
                 // TODO can i use some logging lib everywhere?
                 println!("file={} sha256={} phash={}", file_name, sh, ph);
-                db::save(&file_name, &sh, ph);
+                let img_data = db::ImgData {
+                    path: file_name.to_string(),
+                    sha256: sh,
+                    phash: ph.to_string()
+                };
+                db::save(&img_data);
             } else {
                 println!("skipping file={}", file_name);
             }

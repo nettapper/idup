@@ -6,11 +6,18 @@ use std::fs::create_dir_all;
 const IDUP_DIR_NAME: &str = "idup";
 const IDUP_DB_NAME: &str = "idup.db3";
 
-pub fn save(file_name: &str, sha256: &str, phash: u64) {
+#[derive(Debug)]
+pub struct ImgData {
+    pub path: String,
+    pub sha256: String,
+    pub phash: String
+}
+
+pub fn save(i: &ImgData) {
     let conn = open_db().unwrap();
     conn.execute(
-        "INSERT INTO hashed (path, sha256, phash) values (?1, ?2, ?3)",
-        params![file_name, sha256, phash.to_string()],
+        "INSERT OR REPLACE INTO hashed (path, sha256, phash) values (?1, ?2, ?3)",
+        params![i.path, i.sha256, i.phash.to_string()],
     ).unwrap();
 }
 
