@@ -1,9 +1,9 @@
 use std::fs::read;
 use std::path::Path;
 
-pub fn hash_path(path: &Path) -> String {
-    let data = read(path).expect("Failed to open the file for the sha256 hash");
-    hash(data)
+pub fn hash_path(path: &Path) -> Result<String, std::io::Error> {
+    let data = read(path)?;
+    Ok(hash(data))
 }
 
 // Pseudocode taken from [Wikipedia](https://en.wikipedia.org/wiki/SHA-2#Pseudocode)

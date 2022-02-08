@@ -1,9 +1,9 @@
-use image::DynamicImage;
+use image::{io::Reader, DynamicImage, ImageError};
 use std::path::Path;
 
-pub fn hash_path(path: &Path) -> u64 {
-    let img = image::open(path).expect("Failed to open the file for the perceptual hash");
-    hash(img)
+pub fn hash_path(path: &Path) -> Result<u64, ImageError> {
+    let img = Reader::open(path)?.with_guessed_format()?.decode()?;
+    Ok(hash(img))
 }
 
 pub fn hash(img: DynamicImage) -> u64 {

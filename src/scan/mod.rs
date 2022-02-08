@@ -24,8 +24,8 @@ pub fn process_path(path: PathBuf, recursive: bool) {
         } else {
             let file_name = curr.to_str().unwrap_or("cannot print path due to non-UTF8 chars");
             if is_img(&curr).unwrap_or(false) {
-                let sh = hash::sha256::hash_path(&curr);
-                let ph = hash::phash::hash_path(&curr);
+                let sh = hash::sha256::hash_path(&curr).unwrap();
+                let ph = hash::phash::hash_path(&curr).unwrap();
                 // TODO can i use some logging lib everywhere?
                 println!("file={} sha256={} phash={}", file_name, sh, ph);
                 let img_data = db::ImgData {
