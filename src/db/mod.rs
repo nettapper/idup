@@ -91,5 +91,12 @@ fn setup_db(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
+    conn.execute("
+        CREATE INDEX IF NOT EXISTS hashed_sha256
+        ON hashed (
+          sha256
+        )",
+        [],
+    )?;
     Ok(())
 }
