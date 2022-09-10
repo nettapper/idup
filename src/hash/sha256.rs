@@ -1,31 +1,69 @@
 use std::fs::read;
 use std::path::Path;
 use image::{io::Reader, ImageError};
+use super::ImgHash;
+use super::ImgHashKind;
 
 // NOTE: hashing the bytes from a DynamicImage isn't the same as
 // hashing the bytes from a file on disk
-pub fn all_hashes_of_img_data(path: &Path) -> Result<Vec<String>, ImageError> {
+pub fn all_hashes_of_img_data(path: &Path) -> Result<Vec<ImgHash>, ImageError> {
     let img = Reader::open(path)?.with_guessed_format()?.decode()?;
     let mut results = Vec::new();
 
-    results.push(hash(img.clone().into_bytes()));
-    results.push(hash(img.rotate90().into_bytes()));
-    results.push(hash(img.rotate180().into_bytes()));
-    results.push(hash(img.rotate270().into_bytes()));
+    results.push(ImgHash {
+        path: path.to_path_buf(),
+        kind: ImgHashKind::Sha256("imgdata".to_string()),
+        hash: hash(img.clone().into_bytes()),
+    });
+    results.push(ImgHash {
+        path: path.to_path_buf(),
+        kind: ImgHashKind::Sha256("imgdata rot90".to_string()),
+        hash: hash(img.rotate90().into_bytes()),
+    });
+    results.push(ImgHash {
+        path: path.to_path_buf(),
+        kind: ImgHashKind::Sha256("imgdata rot180".to_string()),
+        hash: hash(img.rotate180().into_bytes()),
+    });
+    results.push(ImgHash {
+        path: path.to_path_buf(),
+        kind: ImgHashKind::Sha256("imgdata rot270".to_string()),
+        hash: hash(img.rotate270().into_bytes()),
+    });
 
-    results.push(hash(img.flipv().into_bytes()));
-    results.push(hash(img.flipv().rotate90().into_bytes()));
-    results.push(hash(img.flipv().rotate180().into_bytes()));
-    results.push(hash(img.flipv().rotate270().into_bytes()));
+    results.push(ImgHash {
+        path: path.to_path_buf(),
+        kind: ImgHashKind::Sha256("imgdata flipv".to_string()),
+        hash: hash(img.flipv().into_bytes()),
+    });
+    results.push(ImgHash {
+        path: path.to_path_buf(),
+        kind: ImgHashKind::Sha256("imgdata flipv rot90".to_string()),
+        hash: hash(img.flipv().rotate90().into_bytes()),
+    });
+    results.push(ImgHash {
+        path: path.to_path_buf(),
+        kind: ImgHashKind::Sha256("imgdata flipv rot180".to_string()),
+        hash: hash(img.flipv().rotate180().into_bytes()),
+    });
+    results.push(ImgHash {
+        path: path.to_path_buf(),
+        kind: ImgHashKind::Sha256("imgdata flipv rot270".to_string()),
+        hash: hash(img.flipv().rotate270().into_bytes()),
+    });
 
     Ok(results)
 }
 
 // NOTE: hashing the bytes from a DynamicImage isn't the same as
 // hashing the bytes from a file on disk
-pub fn hash_path(path: &Path) -> Result<String, std::io::Error> {
+pub fn hash_path(path: &Path) -> Result<ImgHash, std::io::Error> {
     let data = read(path)?;
-    Ok(hash(data))
+    Ok(ImgHash {
+        path: path.to_path_buf(),
+        kind: ImgHashKind::Sha256("sha256".to_string()),
+        hash: hash(data),
+    })
 }
 
 // Pseudocode taken from [Wikipedia](https://en.wikipedia.org/wiki/SHA-2#Pseudocode)

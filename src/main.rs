@@ -57,11 +57,11 @@ fn main() {
         Opt::Info{ file } => {
             // TODO I need better error handling
             match hash::phash::hash_path(&file) {
-                Ok(ph) => println!("phash: {}", ph),
+                Ok(ph) => println!("phash: {:?}", ph),
                 Err(err) => println!("phash err: {}", err),
             }
             match hash::sha256::hash_path(&file) {
-                Ok(sh) => println!("sha256: {}", sh),
+                Ok(sh) => println!("sha256: {:?}", sh),
                 Err(err) => println!("sha256 err: {}", err),
             }
         }
@@ -69,13 +69,16 @@ fn main() {
         // calculate both phashes, and dist
         Opt::Compare{ img1, img2 } => {
             let hash1 = hash::phash::hash_path(&img1).unwrap();
-            println!("img1: {}", hash1);
+            println!("img1: {:?}", hash1);
 
             let hash2 = hash::phash::hash_path(&img2).unwrap();
-            println!("img2: {}", hash2);
+            println!("img2: {:?}", hash2);
 
             let diff = hash::hamming_dist(hash1, hash2);
-            println!("diff: {}", diff);
+            match diff {
+                Ok(val) => println!("diff: {}", val),
+                Err(_) => println!("failed to calculate dist"),
+            }
         }
 
         // Find & store hashes into db

@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::fs::read_dir;
 use infer::{get_from_path, MatcherType};
-
 use crate::hash;
 use crate::db;
 
@@ -25,17 +24,14 @@ pub fn process_path(path: PathBuf, recursive: bool) {
             let file_name = curr.to_str().unwrap_or("cannot print path due to non-UTF8 chars");
             // TODO mv this to a seperate fn
             if is_img(&curr).unwrap_or(false) {
+                // TODO save all hashes
                 // println!("{:?}", hash::sha256::all_hashes_of_img_data(&curr).unwrap());
                 let sh = hash::sha256::hash_path(&curr).unwrap();
                 let ph = hash::phash::hash_path(&curr).unwrap();
                 // TODO can i use some logging lib everywhere?
-                println!("file={} sha256={} phash={}", file_name, sh, ph);
-                let img_data = db::ImgData {
-                    path: Path::new(file_name).to_path_buf(),
-                    sha256: sh,
-                    phash: ph.to_string()
-                };
-                db::save(&img_data);
+                println!("file={} sha256={:?} phash={:?}", file_name, sh, ph);
+                db::save(&sh);
+                db::save(&ph);
             } else {
                 println!("skipping file={}", file_name);
             }
