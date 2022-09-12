@@ -17,12 +17,13 @@ pub struct ImgData {
 
 pub fn exact_match(path: &PathBuf) -> Result<Vec<ImgData>> {
     println!("exact_match on path: {:?}", path);
+    // TODO I could use a struct & pass that in to enforce the absolute path
     // SAFETY: all paths passed to the db need to be absolute
     let path = path.canonicalize().unwrap();
     let conn = open_db()?;
     // TODO should we show the given path in the output?
     let mut stmt = conn.prepare("
-        SELECT DISTINCT i_dup.path, h_dup.hash
+        SELECT DISTINCT i_dup.path
         FROM images i
         JOIN hashes h
           ON i.images_id = h.images_id
@@ -40,7 +41,7 @@ pub fn exact_match(path: &PathBuf) -> Result<Vec<ImgData>> {
         // TODO ImgData might not be the right struct here
         Ok(ImgData {
             path: Path::new(&path).to_path_buf(),
-            sha256: row.get(1)?,
+            sha256: "".to_string(),
             phash: "".to_string(),
         })
     })?;
@@ -50,7 +51,7 @@ pub fn exact_match(path: &PathBuf) -> Result<Vec<ImgData>> {
 pub fn exact_matches() -> Result<Vec<ImgData>> {
     let conn = open_db()?;
     let mut stmt = conn.prepare("
-        SELECT i.path, a.hash, b.cnt
+        SELECT DISTINCT i.path, b.cnt
         FROM images i
         JOIN hashes a
           ON i.images_id = a.images_id
@@ -69,7 +70,7 @@ pub fn exact_matches() -> Result<Vec<ImgData>> {
         let s: String = row.get(0)?;
         Ok(ImgData {
             path: Path::new(&s).to_path_buf(),
-            sha256: row.get(1)?,
+            sha256: "".to_string(),
             phash: "".to_string(), // TODO this isn't the phash
         })
     })?;
