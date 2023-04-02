@@ -8,7 +8,7 @@ pub mod sha256;
 #[derive(Debug)]
 pub enum ImgHashKind {
     Phash,
-    Sha256(String)
+    Sha256(String) // this describes the rotation & flip performed on the image
 }
 
 impl fmt::Display for ImgHashKind {

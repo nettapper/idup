@@ -24,7 +24,6 @@ pub fn process_path(path: PathBuf, recursive: bool) {
             let file_name = curr.to_str().unwrap_or("cannot print path due to non-UTF8 chars");
             // TODO mv this to a seperate fn
             if is_img(&curr).unwrap_or(false) {
-                // TODO save all hashes
                 let shs = hash::sha256::all_hashes_of_img_data(&curr).unwrap();
                 let ph = hash::phash::hash_path(&curr).unwrap();
                 // TODO can i use some logging lib everywhere?
