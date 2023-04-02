@@ -2,7 +2,7 @@ use rusqlite::{params, Connection, Result};
 use std::path::{Path,PathBuf};
 use std::fs::create_dir_all;
 use std::vec::Vec;
-use crate::hash::ImgHash;
+use crate::hash::{ImgHash, ImgHashKind};
 
 // TODO might need to mv all const to common location
 const IDUP_DIR_NAME: &str = "idup";
@@ -102,6 +102,37 @@ pub fn save(img: &ImgHash) -> Result<(), rusqlite::Error> {
            values (?1, ?2, (SELECT images_id FROM images WHERE path = ?3))",
         params![img.kind.to_string(), img.hash, img.path.to_str()],
     )?;
+    // now save partial_hashes
+    match img.kind {
+        ImgHashKind::Phash => {
+            save_partial_phash(&img, &conn)?;
+        },
+        _ => {}
+    }
+    Ok(())
+}
+
+fn save_partial_phash(img: &ImgHash, conn: &Connection) -> Result<(), rusqlite::Error> {
+    // TODO split up the hash into multiple non-overlapping segments
+    let chunk_size = 4;
+    let mut chunks: Vec<&str> = vec!["a"; img.hash.len()/chunk_size+1];
+    println!("debug chunks={:?}", &chunks);
+    // TODO pull this into a util file & write a test for it
+    println!("debug img.hash={:?}", &img.hash);
+    for (i,_) in img.hash.chars().enumerate() {
+        println!("debug i={} j={}", i-i%chunk_size, i+1);
+        println!("debug chunk={:?}", &img.hash[i-i%chunk_size..i+1]);
+        chunks[i/chunk_size] = &img.hash[i-i%chunk_size..i+1];
+    }
+    println!("debug chunks={:?}", &chunks);
+    // save each in the partial_hashes table w/ it's sequence number
+    for (i,chunk) in chunks.iter().enumerate() {
+        conn.execute(
+            "INSERT OR REPLACE INTO partial_hashes (sequence, part_hash, images_id)
+               values (?1, ?2, (SELECT images_id FROM images WHERE path = ?3))",
+            params![i, chunk, img.path.to_str()],
+        )?;
+    }
     Ok(())
 }
 
@@ -133,6 +164,15 @@ fn setup_db(conn: &Connection) -> Result<()> {
           kind TEXT,
           hash TEXT,
           PRIMARY KEY (images_id, kind),
+          FOREIGN KEY (images_id) REFERENCES images (images_id)
+        );
+
+        -- this table only supports one kind of partial hash currently (phash)
+        CREATE TABLE IF NOT EXISTS partial_hashes (
+          images_id INTEGER,
+          sequence INTEGER,
+          part_hash TEXT,
+          PRIMARY KEY (images_id, sequence),
           FOREIGN KEY (images_id) REFERENCES images (images_id)
         );
 
