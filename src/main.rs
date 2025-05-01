@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 use structopt::StructOpt;
 
+mod db;
 mod hash;
 mod scan;
-mod db;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -45,7 +45,7 @@ enum Opt {
         /// File 2
         #[structopt(parse(from_os_str))]
         img2: PathBuf,
-    }
+    },
 }
 
 fn main() {
@@ -54,7 +54,7 @@ fn main() {
 
     match opt {
         // calculate it's phash and print it
-        Opt::Info{ file } => {
+        Opt::Info { file } => {
             // TODO I need better error handling
             match hash::phash::hash_path(&file) {
                 Ok(ph) => println!("phash: {:?}", ph),
@@ -67,7 +67,7 @@ fn main() {
         }
 
         // calculate both phashes, and dist
-        Opt::Compare{ img1, img2 } => {
+        Opt::Compare { img1, img2 } => {
             let hash1 = hash::phash::hash_path(&img1).unwrap();
             println!("img1: {:?}", hash1);
 
@@ -82,12 +82,12 @@ fn main() {
         }
 
         // Find & store hashes into db
-        Opt::Scan{ path, recursive } => {
+        Opt::Scan { path, recursive } => {
             scan::process_path(path, recursive);
         }
 
         // List matches of file
-        Opt::List{ path } => {
+        Opt::List { path } => {
             // TODO future features
             // - if dir, find all matches that fall under the parent
             // - if file, find all matches for that file
@@ -99,7 +99,7 @@ fn main() {
                     for data in iter {
                         println!("{:?}", data.path);
                     }
-                },
+                }
                 Some(path) => {
                     let iter = db::exact_match(&path).unwrap();
                     for data in iter {
