@@ -584,6 +584,7 @@ dependencies = [
  "env_logger",
  "image",
  "infer",
+ "log",
  "rusqlite",
 ]
 
