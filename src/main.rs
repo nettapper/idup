@@ -1,12 +1,12 @@
 use std::path::PathBuf;
-use structopt::StructOpt;
+use clap::Parser;
 
 mod db;
 mod hash;
 mod scan;
 
-#[derive(Debug, StructOpt)]
-#[structopt(
+#[derive(Debug, Parser)]
+#[command(
     name = "idup",
     about = "Find duplicate images using avg perceptual hash function"
 )]
@@ -14,16 +14,14 @@ enum Opt {
     /// Given a path, calculate & store hashes of files in the db
     Scan {
         /// File or folder
-        #[structopt(parse(from_os_str))]
         path: PathBuf,
-        #[structopt(short, long)]
+        #[arg(short, long)]
         recursive: bool,
         // TODO should I add follow symlink opt (it looks to be a nightly feature right now)
     },
     /// Retrieve duplicates or near duplicates from the db
     List {
         /// File or folder
-        #[structopt(parse(from_os_str))]
         path: Option<PathBuf>,
     },
     /// Clean outdated data in the db
@@ -32,7 +30,6 @@ enum Opt {
     Update,
     /// Print information about a particular file
     Info {
-        #[structopt(parse(from_os_str))]
         file: PathBuf,
     },
     /// Print information about two files
@@ -40,16 +37,14 @@ enum Opt {
         // TODO should I make this 2..n files?
         // TODO should this & info be merged?
         /// File 1
-        #[structopt(parse(from_os_str))]
         img1: PathBuf,
         /// File 2
-        #[structopt(parse(from_os_str))]
         img2: PathBuf,
     },
 }
 
 fn main() {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     println!("{:?}", opt);
 
     match opt {
