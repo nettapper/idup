@@ -1,6 +1,8 @@
 use crate::hash::{ImgHash, ImgHashKind};
-use sqlx::{query, query_as, query_scalar, FromRow, SqlitePool};
+use directories::ProjectDirs;
 use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::{query, query_as, query_scalar, FromRow, SqlitePool};
+use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -221,16 +223,16 @@ async fn save_partial_phash(
 }
 
 fn setup_dir() -> PathBuf {
-    let base = std::env::var("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| Path::new("/home/cd/.local/share").to_path_buf());
-    let db_path = base.join(IDUP_DIR_NAME).join(IDUP_DB_NAME);
+    let proj_dirs = ProjectDirs::from("", "", IDUP_DIR_NAME)
+        .expect("Could not determine user data directory");
+
+    let db_path = proj_dirs.data_dir().join(IDUP_DB_NAME);
     let parent = db_path
         .parent()
-        .expect("Can't determine parent dir for idup db")
-        .to_path_buf();
+        .expect("Can't determine parent dir for idup db");
 
-    std::fs::create_dir_all(parent).expect("Can't create db parent directory");
+    create_dir_all(parent).expect("Can't create db parent directory");
+
     db_path
 }
 
