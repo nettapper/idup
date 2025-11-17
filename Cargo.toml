@@ -10,5 +10,5 @@ edition = "2021"
 image = "0.25"
 clap = { version = "4.5", features = ["derive"] }
 infer = "0.19.0"
-rusqlite = "0.35.0"
+rusqlite = "0.37.0"
 env_logger = "0.11.8"
