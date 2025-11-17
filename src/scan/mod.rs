@@ -29,9 +29,13 @@ pub fn process_path(path: PathBuf, recursive: bool) {
                 // TODO can i use some logging lib everywhere?
                 println!("file={} sha256s={:?} phash={:?}", file_name, shs, ph);
                 for sh in shs {
-                    db::save(&sh);
+                    if let Err(e) = db::save(&sh) {
+                        eprintln!("Failed to save sha256 hash for {}: {}", file_name, e);
+                    }
                 }
-                db::save(&ph);
+                if let Err(e) = db::save(&ph) {
+                    eprintln!("Failed to save phash for {}: {}", file_name, e);
+                }
             } else {
                 println!("skipping file={}", file_name);
             }
