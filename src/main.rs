@@ -1,4 +1,6 @@
 use clap::Parser;
+use env_logger::{Builder, Target};
+use log::{debug, error, info, LevelFilter};
 use std::path::PathBuf;
 
 mod db;
@@ -39,35 +41,40 @@ enum Opt {
 }
 
 fn main() {
+    Builder::new()
+        .target(Target::Stdout)
+        .filter_level(LevelFilter::Info)
+        .parse_default_env()
+        .init();
     let opt = Opt::parse();
-    println!("{:?}", opt);
+    debug!("{:?}", opt);
 
     match opt {
         // calculate it's phash and print it
         Opt::Info { file } => {
             // TODO I need better error handling
             match hash::phash::hash_path(&file) {
-                Ok(ph) => println!("phash: {:?}", ph),
-                Err(err) => println!("phash err: {}", err),
+                Ok(ph) => info!("phash: {:?}", ph),
+                Err(err) => error!("phash err: {}", err),
             }
             match hash::sha256::hash_path(&file) {
-                Ok(sh) => println!("sha256: {:?}", sh),
-                Err(err) => println!("sha256 err: {}", err),
+                Ok(sh) => info!("sha256: {:?}", sh),
+                Err(err) => error!("sha256 err: {}", err),
             }
         }
 
         // calculate both phashes, and dist
         Opt::Compare { img1, img2 } => {
             let hash1 = hash::phash::hash_path(&img1).unwrap();
-            println!("img1: {:?}", hash1);
+            info!("img1: {:?}", hash1);
 
             let hash2 = hash::phash::hash_path(&img2).unwrap();
-            println!("img2: {:?}", hash2);
+            info!("img2: {:?}", hash2);
 
             let diff = hash::hamming_dist(hash1, hash2);
             match diff {
-                Ok(val) => println!("diff: {}", val),
-                Err(_) => println!("failed to calculate dist"),
+                Ok(val) => info!("diff: {}", val),
+                Err(_) => error!("failed to calculate dist"),
             }
         }
 
@@ -87,20 +94,20 @@ fn main() {
                 None => {
                     let iter = db::exact_matches().unwrap();
                     for data in iter {
-                        println!("{:?}", data.path);
+                        info!("{:?}", data.path);
                     }
                 }
                 Some(path) => {
                     let iter = db::exact_match(&path).unwrap();
                     for data in iter {
-                        println!("{:?}", data.path);
+                        info!("{:?}", data.path);
                     }
                 }
             }
         }
 
         _ => {
-            println!("This functionality is currently being worked on");
+            info!("This functionality is currently being worked on");
         }
     }
 }

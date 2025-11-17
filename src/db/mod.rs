@@ -1,5 +1,6 @@
 use crate::hash::{ImgHash, ImgHashKind};
 use directories::ProjectDirs;
+use log::{debug, trace};
 use rusqlite::{params, Connection, Result};
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
@@ -17,7 +18,7 @@ pub struct ImgData {
 }
 
 pub fn exact_match(path: &PathBuf) -> Result<Vec<ImgData>> {
-    println!("exact_match on path: {:?}", path);
+    debug!("exact_match on path: {:?}", path);
     // TODO I could use a struct & pass that in to enforce the absolute path
     // SAFETY: all paths passed to the db need to be absolute
     let path = path.canonicalize().unwrap();
@@ -113,15 +114,15 @@ fn save_partial_phash(img: &ImgHash, conn: &Connection) -> Result<(), rusqlite::
     // TODO split up the hash into multiple non-overlapping segments
     let chunk_size = 4;
     let mut chunks: Vec<&str> = vec!["a"; img.hash.len() / chunk_size + 1];
-    println!("debug chunks={:?}", &chunks);
+    trace!("debug chunks={:?}", &chunks);
     // TODO pull this into a util file & write a test for it
-    println!("debug img.hash={:?}", &img.hash);
+    trace!("debug img.hash={:?}", &img.hash);
     for (i, _) in img.hash.chars().enumerate() {
-        println!("debug i={} j={}", i - i % chunk_size, i + 1);
-        println!("debug chunk={:?}", &img.hash[i - i % chunk_size..i + 1]);
+        trace!("debug i={} j={}", i - i % chunk_size, i + 1);
+        trace!("debug chunk={:?}", &img.hash[i - i % chunk_size..i + 1]);
         chunks[i / chunk_size] = &img.hash[i - i % chunk_size..i + 1];
     }
-    println!("debug chunks={:?}", &chunks);
+    trace!("debug chunks={:?}", &chunks);
     // save each in the partial_hashes table w/ it's sequence number
     for (i, chunk) in chunks.iter().enumerate() {
         conn.execute(

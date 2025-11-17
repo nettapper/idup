@@ -102,12 +102,12 @@ pub fn hash(mut data: Vec<u8>) -> String {
         0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
     ];
 
-    // println!("pre data: {:?}", data);
+    // trace!("pre data: {:?}", data);
     // Pre-processing (Padding):
     // begin with the original message of length L bits
     // TODO: is there a better way than hardcoding number of bits in u8?
     let l: u64 = data.len() as u64 * 8;
-    // println!("l: {:?}", l);
+    // trace!("l: {:?}", l);
     // append a single '1' bit
     data.push(1_u8 << 7);
     // append K '0' bits, where K is the minimum number >= 0 such that L + 1 + K + 64 is a multiple of 512
@@ -115,14 +115,14 @@ pub fn hash(mut data: Vec<u8>) -> String {
     if j == 512 {
         j = 0;
     } // case where no other zeros are needed
-      // println!("j (K): {:?}", j);
+      // trace!("j (K): {:?}", j);
     while j >= 8 {
         data.push(0);
         j = j.saturating_sub(8);
     }
     // append L as a 64-bit big-endian integer, making the total post-processed length a multiple of 512 bits
     data.extend_from_slice(&l.to_be_bytes());
-    // println!("post data (len {:?}): {:?}", data.len(), data);
+    // trace!("post data (len {:?}): {:?}", data.len(), data);
     assert_eq!((data.len() * 8) % 512, 0);
     // such that the bits in the message are L 1 00..<K 0's>..00 <L as 64 bit integer> = k*512 total bits
 
@@ -131,7 +131,7 @@ pub fn hash(mut data: Vec<u8>) -> String {
     let num_of_u8s = 512 / 8;
     // for each chunk
     for chunk in data.chunks(num_of_u8s) {
-        // println!("chunk (len {:?}): {:?}", chunk.len(), chunk);
+        // trace!("chunk (len {:?}): {:?}", chunk.len(), chunk);
         // each chunk should be 64 u8 = 16 u32
         assert_eq!(chunk.len(), 64);
         // create a 64-entry message schedule array w[0..63] of 32-bit words
@@ -142,10 +142,10 @@ pub fn hash(mut data: Vec<u8>) -> String {
             // TODO ensure word is big endian
             let word: u32 =
                 ((arr[0] as u32) << 24) + ((arr[1] as u32) << 16) + ((arr[2] as u32) << 8) + (arr[3] as u32);
-            // println!("{:#} {:#?} {:#x}", i, arr, word);
+            // trace!("{:#} {:#?} {:#x}", i, arr, word);
             w[i] = word;
         }
-        // println!("w (len {:?}): {:?}", w.len(), w);
+        // trace!("w (len {:?}): {:?}", w.len(), w);
 
         // Extend the first 16 words into the remaining 48 words w[16..63] of the message schedule array:
         for i in 16..64 {
