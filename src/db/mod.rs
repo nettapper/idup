@@ -3,6 +3,7 @@ use std::path::{Path,PathBuf};
 use std::fs::create_dir_all;
 use std::vec::Vec;
 use crate::hash::{ImgHash, ImgHashKind};
+use directories::ProjectDirs;
 
 // TODO might need to mv all const to common location
 const IDUP_DIR_NAME: &str = "idup";
@@ -144,11 +145,17 @@ fn open_db() -> Result<Connection> {
 }
 
 fn setup_dir() -> PathBuf {
-    // TODO this should respect XDG_DATA_HOME
-    let db_path = Path::new("/home/cd/.local/share").join(IDUP_DIR_NAME).join(IDUP_DB_NAME);
-    let parent = db_path.parent().expect(format!("Can't determine parent for db_path={:?}", db_path).as_str());
-    create_dir_all(parent).expect(format!("Can't create dir parent={:?}", parent).as_str());
-    db_path.to_path_buf()
+    let proj_dirs = ProjectDirs::from("", "", IDUP_DIR_NAME)
+        .expect("Could not determine user data directory");
+
+    let db_path = proj_dirs.data_dir().join(IDUP_DB_NAME);
+    let parent = db_path.parent()
+        .expect(&format!("Can't determine parent for db_path={:?}", db_path));
+
+    create_dir_all(parent)
+        .expect(&format!("Can't create dir parent={:?}", parent));
+
+    db_path
 }
 
 fn setup_db(conn: &Connection) -> Result<()> {
