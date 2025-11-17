@@ -1,13 +1,13 @@
 use std::fs::read;
 use std::path::Path;
-use image::{io::Reader, ImageError};
+use image::{ImageReader, ImageError};
 use super::ImgHash;
 use super::ImgHashKind;
 
 // NOTE: hashing the bytes from a DynamicImage isn't the same as
 // hashing the bytes from a file on disk
 pub fn all_hashes_of_img_data(path: &Path) -> Result<Vec<ImgHash>, ImageError> {
-    let img = Reader::open(path)?.with_guessed_format()?.decode()?;
+    let img = ImageReader::open(path)?.with_guessed_format()?.decode()?;
     let mut results = Vec::new();
 
     results.push(ImgHash {
