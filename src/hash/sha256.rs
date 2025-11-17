@@ -1,8 +1,8 @@
-use std::fs::read;
-use std::path::Path;
-use image::{ImageReader, ImageError};
 use super::ImgHash;
 use super::ImgHashKind;
+use image::{ImageError, ImageReader};
+use std::fs::read;
+use std::path::Path;
 
 // NOTE: hashing the bytes from a DynamicImage isn't the same as
 // hashing the bytes from a file on disk
@@ -90,6 +90,7 @@ pub fn hash(mut data: Vec<u8>) -> String {
 
     // Initialize array of round constants:
     // (first 32 bits of the fractional parts of the cube roots of the first 64 primes 2..311):
+    #[rustfmt::skip]
     let k: [u32; 64] = [
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
         0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -101,7 +102,6 @@ pub fn hash(mut data: Vec<u8>) -> String {
         0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
     ];
 
-
     // println!("pre data: {:?}", data);
     // Pre-processing (Padding):
     // begin with the original message of length L bits
@@ -111,9 +111,11 @@ pub fn hash(mut data: Vec<u8>) -> String {
     // append a single '1' bit
     data.push(1_u8 << 7);
     // append K '0' bits, where K is the minimum number >= 0 such that L + 1 + K + 64 is a multiple of 512
-    let mut j = 512 - ((l + 64 + 8) % 512);  // var 'j' to not shadow k, +8 for u8 above
-    if j == 512 { j = 0; } // case where no other zeros are needed
-    // println!("j (K): {:?}", j);
+    let mut j = 512 - ((l + 64 + 8) % 512); // var 'j' to not shadow k, +8 for u8 above
+    if j == 512 {
+        j = 0;
+    } // case where no other zeros are needed
+      // println!("j (K): {:?}", j);
     while j >= 8 {
         data.push(0);
         j = j.saturating_sub(8);
@@ -138,10 +140,8 @@ pub fn hash(mut data: Vec<u8>) -> String {
         // copy current chunk into first 16 words w[0..15] of the message schedule array
         for (i, arr) in (0..).zip(chunk.chunks(4)) {
             // TODO ensure word is big endian
-            let word: u32 = ((arr[0] as u32) << 24)
-                + ((arr[1] as u32) << 16)
-                + ((arr[2] as u32) << 8)
-                + (arr[3] as u32);
+            let word: u32 =
+                ((arr[0] as u32) << 24) + ((arr[1] as u32) << 16) + ((arr[2] as u32) << 8) + (arr[3] as u32);
             // println!("{:#} {:#?} {:#x}", i, arr, word);
             w[i] = word;
         }
@@ -150,11 +150,17 @@ pub fn hash(mut data: Vec<u8>) -> String {
         // Extend the first 16 words into the remaining 48 words w[16..63] of the message schedule array:
         for i in 16..64 {
             // s0 := (w[i-15] rightrotate  7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift  3)
-            let s0: u32 = w[i-15].rotate_right(7) ^ w[i-15].rotate_right(18) ^ (w[i-15] >> 3);
+            let s0: u32 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
             // s1 := (w[i- 2] rightrotate 17) xor (w[i- 2] rightrotate 19) xor (w[i- 2] rightshift 10)
-            let s1: u32 = w[i-2].rotate_right(17) ^ w[i-2].rotate_right(19) ^ (w[i-2] >> 10);
+            let s1: u32 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
             // w[i] := w[i-16] + s0 + w[i-7] + s1
-            w[i] = w[i-16].overflowing_add(s0).0.overflowing_add(w[i-7]).0.overflowing_add(s1).0;
+            w[i] = w[i - 16]
+                .overflowing_add(s0)
+                .0
+                .overflowing_add(w[i - 7])
+                .0
+                .overflowing_add(s1)
+                .0;
         }
 
         // Initialize working variables to current hash value:
@@ -175,7 +181,15 @@ pub fn hash(mut data: Vec<u8>) -> String {
             // ch := (e and f) xor ((not e) and g)
             let ch = (e & f) ^ ((!e) & g);
             // temp1 := h + S1 + ch + k[i] + w[i]
-            let temp1 = h.overflowing_add(s1).0.overflowing_add(ch).0.overflowing_add(k[i]).0.overflowing_add(w[i]).0;
+            let temp1 = h
+                .overflowing_add(s1)
+                .0
+                .overflowing_add(ch)
+                .0
+                .overflowing_add(k[i])
+                .0
+                .overflowing_add(w[i])
+                .0;
             // S0 := (a rightrotate 2) xor (a rightrotate 13) xor (a rightrotate 22)
             let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
             // maj := (a and b) xor (a and c) xor (b and c)

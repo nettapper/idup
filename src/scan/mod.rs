@@ -1,8 +1,8 @@
-use std::path::{Path, PathBuf};
-use std::fs::read_dir;
-use infer::{get_from_path, MatcherType};
-use crate::hash;
 use crate::db;
+use crate::hash;
+use infer::{get_from_path, MatcherType};
+use std::fs::read_dir;
+use std::path::{Path, PathBuf};
 
 pub fn process_path(path: PathBuf, recursive: bool) {
     let mut stack: Vec<PathBuf> = Vec::new();
@@ -44,6 +44,5 @@ pub fn process_path(path: PathBuf, recursive: bool) {
 }
 
 fn is_img(path: &Path) -> Option<bool> {
-    Some(get_from_path(path).ok()??
-        .matcher_type() == MatcherType::Image)
+    Some(get_from_path(path).ok()??.matcher_type() == MatcherType::Image)
 }

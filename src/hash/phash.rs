@@ -1,7 +1,7 @@
-use image::{ImageReader, DynamicImage, ImageError};
-use std::path::Path;
 use super::ImgHash;
 use super::ImgHashKind;
+use image::{DynamicImage, ImageError, ImageReader};
+use std::path::Path;
 
 pub fn hash_path(path: &Path) -> Result<ImgHash, ImageError> {
     let img = ImageReader::open(path)?.with_guessed_format()?.decode()?;
@@ -24,9 +24,7 @@ pub fn hash(img: DynamicImage) -> u64 {
 
     let mut total: u32 = 0;
     for p in img.iter() {
-        total = total
-            .checked_add(*p as u32)
-            .expect("overflow when calculating total");
+        total = total.checked_add(*p as u32).expect("overflow when calculating total");
     }
     // println!("total {:?}", total);
 

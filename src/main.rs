@@ -1,15 +1,12 @@
-use std::path::PathBuf;
 use clap::Parser;
+use std::path::PathBuf;
 
 mod db;
 mod hash;
 mod scan;
 
 #[derive(Debug, Parser)]
-#[command(
-    name = "idup",
-    about = "Find duplicate images using avg perceptual hash function"
-)]
+#[command(name = "idup", about = "Find duplicate images using avg perceptual hash function")]
 enum Opt {
     /// Given a path, calculate & store hashes of files in the db
     Scan {
@@ -29,9 +26,7 @@ enum Opt {
     /// Recompute hashes of files in db
     Update,
     /// Print information about a particular file
-    Info {
-        file: PathBuf,
-    },
+    Info { file: PathBuf },
     /// Print information about two files
     Compare {
         // TODO should I make this 2..n files?
