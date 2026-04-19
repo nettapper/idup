@@ -261,6 +261,7 @@ pub async fn compare(Form(form): Form<CompareForm>) -> Html<String> {
 #[derive(Deserialize)]
 pub struct RandomQuery {
     n: Option<u32>,
+    filter: Option<String>,
 }
 
 pub async fn random(
@@ -268,8 +269,9 @@ pub async fn random(
     Query(params): Query<RandomQuery>,
 ) -> Html<String> {
     let n = params.n.unwrap_or(20);
+    let filter = params.filter.as_deref().filter(|s| !s.trim().is_empty());
 
-    match crate::db::random_images(&pool, n).await {
+    match crate::db::random_images(&pool, n, filter).await {
         Err(e) => Html(err_html(&e.to_string())),
         Ok(data) if data.is_empty() => {
             Html(r#"<p class="muted">No images in db.</p>"#.to_string())
@@ -303,6 +305,7 @@ pub async fn gallery(
 ) -> Html<String> {
     let query_str = raw.unwrap_or_default();
     let mut hash: Option<String> = None;
+    let mut dir: Option<String> = None;
     let mut path_params: Vec<String> = Vec::new();
 
     for pair in query_str.split('&') {
@@ -310,6 +313,7 @@ pub async fn gallery(
             let value = percent_decode(v);
             match k {
                 "hash" => hash = Some(value),
+                "dir" => dir = Some(value),
                 "path" => path_params.push(value),
                 _ => {}
             }
@@ -318,6 +322,11 @@ pub async fn gallery(
 
     let paths: Vec<String> = if let Some(ref h) = hash {
         match crate::db::images_for_group(&pool, h).await {
+            Ok(data) => data.into_iter().map(|d| d.path).collect(),
+            Err(e) => return Html(simple_error_page(&e.to_string())),
+        }
+    } else if let Some(ref d) = dir {
+        match crate::db::images_in_dir(&pool, d).await {
             Ok(data) => data.into_iter().map(|d| d.path).collect(),
             Err(e) => return Html(simple_error_page(&e.to_string())),
         }
@@ -402,14 +411,22 @@ fn build_gallery_page(paths: &[String]) -> String {
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| p.clone());
+        let dir = Path::new(p)
+            .parent()
+            .map(|d| d.to_string_lossy().to_string())
+            .unwrap_or_default();
         let img_src = format!("/api/image?path={}", url_encode(p));
         cards.push_str(&format!(
-            r#"<div class="card">
-  <a href="{img_src_html}" target="_blank" rel="noopener">
+            r#"<div class="card" data-path="{data_path}" data-filename="{data_filename}" data-dir="{data_dir}" data-img-src="{data_img_src}">
+  <div class="card-img">
     <img src="{img_src_html}" loading="lazy" alt="{alt}" />
-  </a>
+  </div>
   <p class="name" title="{path_title}">{filename_html}</p>
 </div>"#,
+            data_path = esc(p),
+            data_filename = esc(&filename),
+            data_dir = esc(&dir),
+            data_img_src = esc(&img_src),
             img_src_html = esc(&img_src),
             alt = esc(&filename),
             path_title = esc(p),
@@ -418,7 +435,7 @@ fn build_gallery_page(paths: &[String]) -> String {
     }
 
     format!(
-        r#"<!DOCTYPE html>
+        r##"<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -465,10 +482,11 @@ fn build_gallery_page(paths: &[String]) -> String {
       overflow: hidden;
       display: flex;
       flex-direction: column;
+      cursor: pointer;
       transition: border-color 0.15s;
     }}
     .card:hover {{ border-color: #7c6af7; }}
-    .card a {{
+    .card-img {{
       display: block;
       aspect-ratio: 1;
       overflow: hidden;
@@ -481,7 +499,7 @@ fn build_gallery_page(paths: &[String]) -> String {
       display: block;
       transition: opacity 0.2s;
     }}
-    .card img:hover {{ opacity: 0.85; }}
+    .card:hover img {{ opacity: 0.85; }}
     .card .name {{
       padding: 0.4rem 0.6rem;
       font-size: 0.72rem;
@@ -496,6 +514,102 @@ fn build_gallery_page(paths: &[String]) -> String {
       color: #64748b;
       font-size: 0.875rem;
     }}
+    /* ── Modal ── */
+    .modal-overlay {{
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.82);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }}
+    .modal-overlay.open {{ display: flex; }}
+    .modal-box {{
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 10px;
+      max-width: min(92vw, 860px);
+      width: 100%;
+      max-height: 92vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }}
+    .modal-header {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #2d3148;
+      gap: 0.75rem;
+    }}
+    .modal-title {{
+      font-size: 0.8rem;
+      color: #94a3b8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-decoration: none;
+    }}
+    .modal-title:hover {{
+      color: #a78bfa;
+      text-decoration: underline;
+    }}
+    .modal-close {{
+      background: none;
+      border: none;
+      color: #64748b;
+      font-size: 1.1rem;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }}
+    .modal-close:hover {{ color: #e2e8f0; background: #2d3148; }}
+    .modal-img-area {{
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0f1117;
+      min-height: 0;
+    }}
+    .modal-img-area img {{
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+    }}
+    .modal-footer {{
+      padding: 0.75rem 1rem;
+      border-top: 1px solid #2d3148;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }}
+    .modal-btn {{
+      font-family: inherit;
+      font-size: 0.78rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 5px;
+      border: 1px solid #7c6af7;
+      background: transparent;
+      color: #a78bfa;
+      cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: background 0.15s, color 0.15s;
+    }}
+    .modal-btn:hover {{ background: #7c6af7; color: #fff; }}
+    .modal-btn.secondary {{
+      border-color: #2d3148;
+      color: #64748b;
+    }}
+    .modal-btn.secondary:hover {{ background: #2d3148; color: #e2e8f0; }}
   </style>
 </head>
 <body>
@@ -506,8 +620,69 @@ fn build_gallery_page(paths: &[String]) -> String {
   <div class="grid">
     {cards}
   </div>
+
+  <!-- Modal overlay -->
+  <div class="modal-overlay" id="modal" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <div class="modal-header">
+        <a class="modal-title" id="modal-title" href="#" target="_blank" title="Browse siblings"></a>
+        <button class="modal-close" id="modal-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="modal-img-area">
+        <img id="modal-img" src="" alt="" />
+      </div>
+      <div class="modal-footer">
+        <a id="modal-open" href="#" target="_blank" class="modal-btn secondary">Open image</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const modal      = document.getElementById('modal');
+    const modalImg   = document.getElementById('modal-img');
+    const modalTitle = document.getElementById('modal-title');
+    const modalOpen  = document.getElementById('modal-open');
+
+    function openModal(card) {{
+      const path   = card.dataset.path;
+      const dir    = card.dataset.dir;
+      const imgSrc = card.dataset.imgSrc;
+
+      modalImg.src           = imgSrc;
+      modalImg.alt           = path;
+      modalTitle.textContent = path;
+      modalTitle.href        = '/gallery?dir=' + encodeURIComponent(dir);
+      modalOpen.href         = imgSrc;
+      modal.classList.add('open');
+      history.pushState({{ modal: true }}, '');
+    }}
+
+    function closeModal(fromPopstate) {{
+      modal.classList.remove('open');
+      modalImg.src = '';
+      if (!fromPopstate) history.back();
+    }}
+
+    window.addEventListener('popstate', () => {{
+      if (modal.classList.contains('open')) closeModal(true);
+    }});
+
+    document.querySelectorAll('.card').forEach(card => {{
+      card.addEventListener('click', () => openModal(card));
+    }});
+
+    document.getElementById('modal-close').addEventListener('click', () => closeModal(false));
+
+    modal.addEventListener('click', e => {{
+      if (e.target === modal) closeModal(false);
+    }});
+
+    document.addEventListener('keydown', e => {{
+      if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(false);
+    }});
+  </script>
 </body>
-</html>"#,
+</html>"##,
         title = esc(&title),
         cards = cards,
     )

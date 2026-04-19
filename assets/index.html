@@ -106,6 +106,10 @@
         Count
         <input type="number" name="n" value="20" min="1" />
       </label>
+      <label>
+        Filter <span class="muted" style="font-size:0.8em">(glob, optional — e.g. <code>*.jpg</code>, <code>/home/user/*</code>)</span>
+        <input type="text" name="filter" placeholder="*.jpg" />
+      </label>
       <button type="submit">Fetch</button>
     </form>
     <span id="random-spinner" class="htmx-indicator">querying…</span>

@@ -118,10 +118,49 @@ pub async fn save(pool: &SqlitePool, img: &ImgHash) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-pub async fn random_images(pool: &SqlitePool, n: u32) -> Result<Vec<ImgData>, sqlx::Error> {
-    let query = "SELECT path FROM images ORDER BY RANDOM() LIMIT ?";
+pub async fn random_images(
+    pool: &SqlitePool,
+    n: u32,
+    filter: Option<&str>,
+) -> Result<Vec<ImgData>, sqlx::Error> {
+    match filter {
+        None => {
+            let query = "SELECT path FROM images ORDER BY RANDOM() LIMIT ?";
+            query_as::<_, ImgData>(query)
+                .bind(n)
+                .fetch_all(pool)
+                .await
+        }
+        Some(pattern) => {
+            let query = "SELECT path FROM images WHERE path GLOB ? ORDER BY RANDOM() LIMIT ?";
+            query_as::<_, ImgData>(query)
+                .bind(pattern)
+                .bind(n)
+                .fetch_all(pool)
+                .await
+        }
+    }
+}
+
+/// Returns all paths that are direct children of `dir` (non-recursive).
+pub async fn images_in_dir(
+    pool: &SqlitePool,
+    dir: &str,
+) -> Result<Vec<ImgData>, sqlx::Error> {
+    let dir = dir.trim_end_matches('/');
+    // Paths that start with "dir/" and have no further '/' after that prefix.
+    let query = r#"
+        SELECT path FROM images
+        WHERE length(path) > length(?) + 1
+          AND substr(path, 1, length(?) + 1) = ? || '/'
+          AND instr(substr(path, length(?) + 2), '/') = 0
+        ORDER BY path
+    "#;
     query_as::<_, ImgData>(query)
-        .bind(n)
+        .bind(dir)
+        .bind(dir)
+        .bind(dir)
+        .bind(dir)
         .fetch_all(pool)
         .await
 }

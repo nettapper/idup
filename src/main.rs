@@ -101,6 +101,10 @@ enum Command {
         /// Number of files to return
         #[arg(default_value_t = 20)]
         n: u32,
+
+        /// Glob pattern to filter paths (e.g. "*.jpg", "/home/user/Photos/*")
+        #[arg(short, long)]
+        filter: Option<String>,
     },
 
     /// Serve a web UI for browsing duplicates
@@ -204,8 +208,8 @@ async fn main() -> sqlx::Result<()> {
             }
         }
 
-        Command::Random { n } => {
-            match db::random_images(&pool, n).await {
+        Command::Random { n, filter } => {
+            match db::random_images(&pool, n, filter.as_deref()).await {
                 Err(e) => eprintln!("Error: {e}"),
                 Ok(data) if data.is_empty() => println!("No images in db."),
                 Ok(data) => {
