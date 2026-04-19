@@ -3,6 +3,9 @@ use infer::{get_from_path, MatcherType};
 use sqlx::SqlitePool;
 use std::fs::read_dir;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use tokio::time::{interval, Duration};
 
 /// Controls which hash variants are computed during a scan.
 ///
@@ -58,6 +61,18 @@ pub async fn process_path(path: PathBuf, recursive: bool, opts: &ScanOptions, po
         }
     }
 
+    let counter = Arc::new(AtomicUsize::new(0));
+    let counter_for_task = Arc::clone(&counter);
+
+    let progress_task = tokio::spawn(async move {
+        let mut ticker = interval(Duration::from_secs(20));
+        ticker.tick().await; // skip the immediate first tick
+        loop {
+            ticker.tick().await;
+            println!("[progress] {} images processed so far", counter_for_task.load(Ordering::Relaxed));
+        }
+    });
+
     while let Some(curr) = stack.pop() {
         if curr.is_dir() {
             if recursive {
@@ -108,10 +123,15 @@ pub async fn process_path(path: PathBuf, recursive: bool, opts: &ScanOptions, po
                     Err(err) => println!("Cannot hash phash for {}: {}", file_name, err),
                 }
             }
+
+            counter.fetch_add(1, Ordering::Relaxed);
         } else {
             println!("skipping file={}", file_name);
         }
     }
+
+    progress_task.abort();
+    println!("Done. {} images processed.", counter.load(Ordering::Relaxed));
 }
 
 fn is_img(path: &Path) -> Option<bool> {

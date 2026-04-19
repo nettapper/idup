@@ -153,6 +153,14 @@ pub async fn path_exists_in_db(pool: &SqlitePool, path: &str) -> Result<bool, sq
     Ok(count > 0)
 }
 
+/// Deletes all data from the database (images, hashes, partial_hashes).
+pub async fn wipe_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    query("DELETE FROM partial_hashes").execute(pool).await?;
+    query("DELETE FROM hashes").execute(pool).await?;
+    query("DELETE FROM images").execute(pool).await?;
+    Ok(())
+}
+
 pub async fn clear_hashes_for_path(pool: &SqlitePool, path: &Path) -> Result<(), sqlx::Error> {
     let path = normalize_path(path);
 

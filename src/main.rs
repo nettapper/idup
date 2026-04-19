@@ -216,6 +216,22 @@ async fn main() -> sqlx::Result<()> {
             }
         }
 
+        Command::Clean => {
+            print!("This will wipe the entire database. Are you sure? [y/N] ");
+            use std::io::{self, Write};
+            io::stdout().flush().ok();
+            let mut input = String::new();
+            io::stdin().read_line(&mut input).ok();
+            if matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
+                match db::wipe_db(&pool).await {
+                    Ok(()) => println!("Database wiped."),
+                    Err(e) => eprintln!("Error wiping database: {e}"),
+                }
+            } else {
+                println!("Aborted.");
+            }
+        }
+
         Command::Web { port, open } => {
             web::serve(port, open, pool).await;
         }
