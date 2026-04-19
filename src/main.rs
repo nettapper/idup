@@ -19,13 +19,49 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Given a path, calculate & store hashes of files in the db
+    /// Compute and store image hashes (default: SHA-256 base only)
+    #[command(
+        long_about = "Compute and store image hashes for all images at the given path.\n\
+            \n\
+            By default only the base SHA-256 of raw pixel data is stored.\n\
+            Use a preset (--exact or --all) or combine individual flags\n\
+            (--rotations, --flips, --phash) to include additional variants.\n\
+            Presets and individual flags are mutually exclusive."
+    )]
     Scan {
-        /// File or folder
+        /// File or directory to scan
         #[arg(value_parser = clap::value_parser!(std::path::PathBuf))]
         path: PathBuf,
+
+        /// Recurse into subdirectories
         #[arg(short, long)]
         recursive: bool,
+
+        // ── Presets ────────────────────────────────────────────────────────
+
+        /// [Preset] SHA-256 base + rot90/180/270. Detects rotated exact duplicates.
+        /// Mutually exclusive with --all and individual hash flags.
+        #[arg(long, help_heading = "Hash Presets", conflicts_with_all = ["all", "phash", "rotations", "flips"])]
+        exact: bool,
+
+        /// [Preset] All variants: SHA-256 base, all rotations, all flips, and phash.
+        /// Mutually exclusive with --exact and individual hash flags.
+        #[arg(long, help_heading = "Hash Presets", conflicts_with_all = ["exact", "phash", "rotations", "flips"])]
+        all: bool,
+
+        // ── Individual flags ───────────────────────────────────────────────
+
+        /// SHA-256 of rot90, rot180, rot270 (detects rotated duplicates)
+        #[arg(long, help_heading = "Individual Hash Flags", conflicts_with_all = ["exact", "all"])]
+        rotations: bool,
+
+        /// SHA-256 of flipv and flipv+rot90/180/270 (detects mirrored duplicates)
+        #[arg(long, help_heading = "Individual Hash Flags", conflicts_with_all = ["exact", "all"])]
+        flips: bool,
+
+        /// Perceptual hash — detects near-duplicate / visually similar images
+        #[arg(long, help_heading = "Individual Hash Flags", conflicts_with_all = ["exact", "all"])]
+        phash: bool,
         // TODO should I add follow symlink opt (it looks to be a nightly feature right now)
     },
 
@@ -112,9 +148,21 @@ async fn main() -> sqlx::Result<()> {
             }
         }
 
-        Command::Scan { path, recursive } => {
-            // Find & store hashes into db
-            scan::process_path(path, recursive, &pool).await;
+        Command::Scan { path, recursive, exact, all, phash, rotations, flips } => {
+            let opts = if all {
+                scan::ScanOptions::all()
+            } else if exact {
+                scan::ScanOptions::exact()
+            } else if phash || rotations || flips {
+                scan::ScanOptions {
+                    sha256_rotations: rotations,
+                    sha256_flips: flips,
+                    phash,
+                }
+            } else {
+                scan::ScanOptions::default()
+            };
+            scan::process_path(path, recursive, &opts, &pool).await;
         }
 
         Command::List { path } => {

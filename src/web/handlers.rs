@@ -27,6 +27,16 @@ pub struct ScanForm {
     path: String,
     /// Present as "true" when the checkbox is checked; absent otherwise.
     recursive: Option<String>,
+    /// Preset: sha256 base + rotations, no flips, no phash
+    exact: Option<String>,
+    /// Preset: all hash variants
+    all: Option<String>,
+    /// Individual: include phash
+    phash: Option<String>,
+    /// Individual: include sha256 rotations
+    rotations: Option<String>,
+    /// Individual: include sha256 flip variants
+    flips: Option<String>,
 }
 
 pub async fn scan(
@@ -36,12 +46,35 @@ pub async fn scan(
     let path = PathBuf::from(&form.path);
     let recursive = form.recursive.is_some();
 
-    crate::scan::process_path(path, recursive, &pool).await;
+    let opts = if form.all.is_some() {
+        crate::scan::ScanOptions::all()
+    } else if form.exact.is_some() {
+        crate::scan::ScanOptions::exact()
+    } else {
+        crate::scan::ScanOptions {
+            sha256_rotations: form.rotations.is_some(),
+            sha256_flips: form.flips.is_some(),
+            phash: form.phash.is_some(),
+        }
+    };
+
+    crate::scan::process_path(path, recursive, &opts, &pool).await;
+
+    let mut notes: Vec<&str> = Vec::new();
+    if recursive { notes.push("recursive"); }
+    if opts.sha256_rotations { notes.push("rotations"); }
+    if opts.sha256_flips { notes.push("flips"); }
+    if opts.phash { notes.push("phash"); }
+    let suffix = if notes.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", notes.join(", "))
+    };
 
     Html(format!(
         r#"<div class="result-success">Scan complete for <code>{}</code>{}</div>"#,
         esc(&form.path),
-        if recursive { " (recursive)" } else { "" }
+        suffix,
     ))
 }
 

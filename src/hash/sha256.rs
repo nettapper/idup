@@ -6,7 +6,11 @@ use std::path::Path;
 
 // NOTE: hashing the bytes from a DynamicImage isn't the same as
 // hashing the bytes from a file on disk
-pub fn all_hashes_of_img_data(path: &Path) -> Result<Vec<ImgHash>, ImageError> {
+pub fn selected_hashes_of_img_data(
+    path: &Path,
+    include_rotations: bool,
+    include_flips: bool,
+) -> Result<Vec<ImgHash>, ImageError> {
     let img = ImageReader::open(path)?.with_guessed_format()?.decode()?;
     let mut results = Vec::new();
 
@@ -15,42 +19,47 @@ pub fn all_hashes_of_img_data(path: &Path) -> Result<Vec<ImgHash>, ImageError> {
         kind: ImgHashKind::Sha256("imgdata".to_string()),
         hash: hash(img.clone().into_bytes()),
     });
-    results.push(ImgHash {
-        path: path.to_path_buf(),
-        kind: ImgHashKind::Sha256("imgdata rot90".to_string()),
-        hash: hash(img.rotate90().into_bytes()),
-    });
-    results.push(ImgHash {
-        path: path.to_path_buf(),
-        kind: ImgHashKind::Sha256("imgdata rot180".to_string()),
-        hash: hash(img.rotate180().into_bytes()),
-    });
-    results.push(ImgHash {
-        path: path.to_path_buf(),
-        kind: ImgHashKind::Sha256("imgdata rot270".to_string()),
-        hash: hash(img.rotate270().into_bytes()),
-    });
 
-    results.push(ImgHash {
-        path: path.to_path_buf(),
-        kind: ImgHashKind::Sha256("imgdata flipv".to_string()),
-        hash: hash(img.flipv().into_bytes()),
-    });
-    results.push(ImgHash {
-        path: path.to_path_buf(),
-        kind: ImgHashKind::Sha256("imgdata flipv rot90".to_string()),
-        hash: hash(img.flipv().rotate90().into_bytes()),
-    });
-    results.push(ImgHash {
-        path: path.to_path_buf(),
-        kind: ImgHashKind::Sha256("imgdata flipv rot180".to_string()),
-        hash: hash(img.flipv().rotate180().into_bytes()),
-    });
-    results.push(ImgHash {
-        path: path.to_path_buf(),
-        kind: ImgHashKind::Sha256("imgdata flipv rot270".to_string()),
-        hash: hash(img.flipv().rotate270().into_bytes()),
-    });
+    if include_rotations {
+        results.push(ImgHash {
+            path: path.to_path_buf(),
+            kind: ImgHashKind::Sha256("imgdata rot90".to_string()),
+            hash: hash(img.rotate90().into_bytes()),
+        });
+        results.push(ImgHash {
+            path: path.to_path_buf(),
+            kind: ImgHashKind::Sha256("imgdata rot180".to_string()),
+            hash: hash(img.rotate180().into_bytes()),
+        });
+        results.push(ImgHash {
+            path: path.to_path_buf(),
+            kind: ImgHashKind::Sha256("imgdata rot270".to_string()),
+            hash: hash(img.rotate270().into_bytes()),
+        });
+    }
+
+    if include_flips {
+        results.push(ImgHash {
+            path: path.to_path_buf(),
+            kind: ImgHashKind::Sha256("imgdata flipv".to_string()),
+            hash: hash(img.flipv().into_bytes()),
+        });
+        results.push(ImgHash {
+            path: path.to_path_buf(),
+            kind: ImgHashKind::Sha256("imgdata flipv rot90".to_string()),
+            hash: hash(img.flipv().rotate90().into_bytes()),
+        });
+        results.push(ImgHash {
+            path: path.to_path_buf(),
+            kind: ImgHashKind::Sha256("imgdata flipv rot180".to_string()),
+            hash: hash(img.flipv().rotate180().into_bytes()),
+        });
+        results.push(ImgHash {
+            path: path.to_path_buf(),
+            kind: ImgHashKind::Sha256("imgdata flipv rot270".to_string()),
+            hash: hash(img.flipv().rotate270().into_bytes()),
+        });
+    }
 
     Ok(results)
 }
