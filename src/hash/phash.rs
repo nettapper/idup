@@ -1,7 +1,7 @@
-use image::{io::Reader, DynamicImage, ImageError};
-use std::path::Path;
 use super::ImgHash;
 use super::ImgHashKind;
+use image::{io::Reader, DynamicImage, ImageError};
+use std::path::Path;
 
 pub fn hash_path(path: &Path) -> Result<ImgHash, ImageError> {
     let img = Reader::open(path)?.with_guessed_format()?.decode()?;

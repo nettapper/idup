@@ -1,8 +1,8 @@
-use std::fs::read;
-use std::path::Path;
-use image::{io::Reader, ImageError};
 use super::ImgHash;
 use super::ImgHashKind;
+use image::{io::Reader, ImageError};
+use std::fs::read;
+use std::path::Path;
 
 // NOTE: hashing the bytes from a DynamicImage isn't the same as
 // hashing the bytes from a file on disk
@@ -67,6 +67,7 @@ pub fn hash_path(path: &Path) -> Result<ImgHash, std::io::Error> {
 }
 
 // Pseudocode taken from [Wikipedia](https://en.wikipedia.org/wiki/SHA-2#Pseudocode)
+#[rustfmt::skip]
 pub fn hash(mut data: Vec<u8>) -> String {
     // Note 1: All variables are 32 bit unsigned integers and addition is calculated modulo 2^32
     // Note 2: For each round, there is one round constant k[i] and one entry in the message schedule array w[i], 0 ≤ i ≤ 63
@@ -101,7 +102,6 @@ pub fn hash(mut data: Vec<u8>) -> String {
         0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
     ];
 
-
     // println!("pre data: {:?}", data);
     // Pre-processing (Padding):
     // begin with the original message of length L bits
@@ -111,7 +111,7 @@ pub fn hash(mut data: Vec<u8>) -> String {
     // append a single '1' bit
     data.push(1_u8 << 7);
     // append K '0' bits, where K is the minimum number >= 0 such that L + 1 + K + 64 is a multiple of 512
-    let mut j = 512 - ((l + 64 + 8) % 512);  // var 'j' to not shadow k, +8 for u8 above
+    let mut j = 512 - ((l + 64 + 8) % 512); // var 'j' to not shadow k, +8 for u8 above
     if j == 512 { j = 0; } // case where no other zeros are needed
     // println!("j (K): {:?}", j);
     while j >= 8 {
@@ -252,7 +252,9 @@ mod tests {
     fn test_multiple_chunks() {
         // 10 1's, then 10 2's, then ..., then 10 7's
         // 70 byes = 70 * 8 = 560 bits > 512 bit chunk size
-        let data = String::from("1111111111222222222233333333334444444444555555555566666666667777777777").into_bytes();
+        let data =
+            String::from("1111111111222222222233333333334444444444555555555566666666667777777777")
+                .into_bytes();
         assert_eq!(
             hash(data),
             "7c3bfca2e1355c1dd2c1343e490625b4a59a5c0aefb9d2177a55a6f5d464f369"
