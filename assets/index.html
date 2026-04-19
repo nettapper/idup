@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>idup</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+</head>
+<body>
+
+<nav>
+  <div class="logo">idup</div>
+  <a href="#" class="active" data-panel="scan">scan</a>
+  <a href="#" data-panel="list">list</a>
+  <a href="#" data-panel="info">info</a>
+  <a href="#" data-panel="compare">compare</a>
+</nav>
+
+<main>
+
+  <!-- Scan -->
+  <section id="panel-scan" class="panel active">
+    <h2>Scan</h2>
+    <p class="muted" style="margin-bottom:1rem">Compute and store hashes for all images at a path.</p>
+    <form hx-post="/api/scan" hx-target="#scan-result" hx-swap="innerHTML" hx-indicator="#scan-spinner">
+      <label>
+        Path
+        <input type="text" name="path" placeholder="/home/user/Photos" required />
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" name="recursive" value="true" />
+        Recursive
+      </label>
+      <button type="submit">Scan</button>
+    </form>
+    <span id="scan-spinner" class="htmx-indicator">scanning…</span>
+    <div id="scan-result" class="result-box"></div>
+  </section>
+
+  <!-- List -->
+  <section id="panel-list" class="panel">
+    <h2>List Duplicates</h2>
+    <p class="muted" style="margin-bottom:1rem">Find exact duplicates. Leave path blank to list all groups.</p>
+    <form hx-get="/api/list" hx-target="#list-result" hx-swap="innerHTML" hx-indicator="#list-spinner">
+      <label>
+        Path (optional)
+        <input type="text" name="path" placeholder="/home/user/Photos/image.jpg" />
+      </label>
+      <button type="submit">List</button>
+    </form>
+    <span id="list-spinner" class="htmx-indicator">querying…</span>
+    <div id="list-result" class="result-box"></div>
+  </section>
+
+  <!-- Info -->
+  <section id="panel-info" class="panel">
+    <h2>Info</h2>
+    <p class="muted" style="margin-bottom:1rem">Print the pHash and SHA-256 of a single file.</p>
+    <form hx-get="/api/info" hx-target="#info-result" hx-swap="innerHTML" hx-indicator="#info-spinner">
+      <label>
+        File
+        <input type="text" name="file" placeholder="/home/user/Photos/image.jpg" required />
+      </label>
+      <button type="submit">Get Info</button>
+    </form>
+    <span id="info-spinner" class="htmx-indicator">hashing…</span>
+    <div id="info-result" class="result-box"></div>
+  </section>
+
+  <!-- Compare -->
+  <section id="panel-compare" class="panel">
+    <h2>Compare</h2>
+    <p class="muted" style="margin-bottom:1rem">Compare pHashes of two images and compute Hamming distance.</p>
+    <form hx-post="/api/compare" hx-target="#compare-result" hx-swap="innerHTML" hx-indicator="#compare-spinner">
+      <label>
+        Image 1
+        <input type="text" name="img1" placeholder="/home/user/Photos/a.jpg" required />
+      </label>
+      <label>
+        Image 2
+        <input type="text" name="img2" placeholder="/home/user/Photos/b.jpg" required />
+      </label>
+      <button type="submit">Compare</button>
+    </form>
+    <span id="compare-spinner" class="htmx-indicator">comparing…</span>
+    <div id="compare-result" class="result-box"></div>
+  </section>
+
+</main>
+
+<script>
+  // Simple tab switcher
+  const links = document.querySelectorAll('nav a[data-panel]');
+  const panels = document.querySelectorAll('.panel');
+
+  links.forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault();
+      const target = link.dataset.panel;
+      links.forEach(l => l.classList.remove('active'));
+      panels.forEach(p => p.classList.remove('active'));
+      link.classList.add('active');
+      document.getElementById('panel-' + target).classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>

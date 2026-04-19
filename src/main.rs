@@ -5,6 +5,7 @@ use std::path::PathBuf;
 mod db;
 mod hash;
 mod scan;
+mod web;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -57,6 +58,16 @@ enum Command {
         /// File 2
         #[arg(value_parser = clap::value_parser!(std::path::PathBuf))]
         img2: PathBuf,
+    },
+
+    /// Serve a web UI for browsing duplicates
+    Web {
+        /// Port to listen on
+        #[arg(short, long, default_value_t = 3000)]
+        port: u16,
+        /// Open the browser automatically after starting
+        #[arg(long)]
+        open: bool,
     },
 }
 
@@ -136,6 +147,10 @@ async fn main() -> sqlx::Result<()> {
                     }
                 }
             }
+        }
+
+        Command::Web { port, open } => {
+            web::serve(port, open, pool).await;
         }
 
         _ => {
