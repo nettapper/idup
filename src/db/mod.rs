@@ -12,6 +12,12 @@ pub struct ImgData {
     pub path: String,
 }
 
+#[derive(Debug, FromRow)]
+pub struct ImgDataGrouped {
+    pub group_hash: String,
+    pub path: String,
+}
+
 pub async fn open_pool() -> Result<SqlitePool, sqlx::Error> {
     let db_path = setup_dir();
     let db_url = format!("sqlite:{}", db_path.display());
@@ -50,25 +56,28 @@ pub async fn exact_match(pool: &SqlitePool, path: &Path) -> Result<Vec<ImgData>,
         .await
 }
 
-pub async fn exact_matches(pool: &SqlitePool) -> Result<Vec<ImgData>, sqlx::Error> {
+pub async fn exact_matches_grouped(
+    pool: &SqlitePool,
+) -> Result<Vec<ImgDataGrouped>, sqlx::Error> {
     let query = "
-        SELECT DISTINCT i.path AS path
+        SELECT a.hash AS group_hash, i.path AS path
         FROM images i
         JOIN hashes a
           ON i.images_id = a.images_id
-        JOIN (
-          SELECT hash
-          FROM hashes
-          WHERE kind like 'sha256%'
-          GROUP BY hash
-          HAVING count(*) > 1
-        ) b
-          ON a.hash = b.hash
-        ORDER BY i.path;
+         AND a.kind = 'sha256 imgdata'
+        WHERE a.hash IN (
+            SELECT hash
+            FROM hashes
+            WHERE kind = 'sha256 imgdata'
+            GROUP BY hash
+            HAVING COUNT(*) > 1
+        )
+        ORDER BY a.hash, i.path;
     ";
 
-    query_as::<_, ImgData>(query).fetch_all(pool).await
+    query_as::<_, ImgDataGrouped>(query).fetch_all(pool).await
 }
+
 
 pub async fn save(pool: &SqlitePool, img: &ImgHash) -> Result<(), sqlx::Error> {
     let path = normalize_path(&img.path);

@@ -1,10 +1,10 @@
 use super::ImgHash;
 use super::ImgHashKind;
-use image::{io::Reader, DynamicImage, ImageError};
+use image::{DynamicImage, ImageError, ImageReader};
 use std::path::Path;
 
 pub fn hash_path(path: &Path) -> Result<ImgHash, ImageError> {
-    let img = Reader::open(path)?.with_guessed_format()?.decode()?;
+    let img = ImageReader::open(path)?.with_guessed_format()?.decode()?;
     Ok(ImgHash {
         path: path.to_path_buf(),
         kind: ImgHashKind::Phash,

@@ -103,20 +103,36 @@ async fn main() -> sqlx::Result<()> {
             // List matches of file
             // TODO future features
             // - if dir, find all matches that fall under the parent
-            // - if file, find all matches for that file
-            // - if no path given, find all matches in db
             // - optins to do exact match (sha256) or fuzzy (phash)
             match path {
                 None => {
-                    let data = db::exact_matches(&pool).await.unwrap();
-                    for item in data {
-                        println!("{:?}", item.path);
+                    let data = db::exact_matches_grouped(&pool).await.unwrap();
+                    if data.is_empty() {
+                        println!("No duplicates found.");
+                    } else {
+                        let mut current_hash = String::new();
+                        let mut group_num = 0usize;
+                        for item in &data {
+                            if item.group_hash != current_hash {
+                                if group_num > 0 {
+                                    println!();
+                                }
+                                group_num += 1;
+                                println!("[{}]", group_num);
+                                current_hash = item.group_hash.clone();
+                            }
+                            println!("  {}", item.path);
+                        }
                     }
                 }
                 Some(path) => {
                     let data = db::exact_match(&pool, &path).await.unwrap();
-                    for item in data {
-                        println!("{:?}", item.path);
+                    if data.is_empty() {
+                        println!("No duplicates found.");
+                    } else {
+                        for item in &data {
+                            println!("{}", item.path);
+                        }
                     }
                 }
             }
