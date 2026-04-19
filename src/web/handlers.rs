@@ -1,11 +1,11 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Query, RawQuery, State},
     response::Html,
     Form,
 };
 use serde::Deserialize;
 use sqlx::SqlitePool;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ── Static assets ─────────────────────────────────────────────────────────────
 
@@ -102,25 +102,38 @@ pub async fn list(
                 let mut html = String::from(r#"<div class="groups">"#);
                 let mut current_hash = String::new();
                 let mut group_num = 0usize;
+                // Accumulate paths per group so we can build the gallery link
+                let mut group_paths: Vec<String> = Vec::new();
+
+                // Helper closure to flush a completed group
+                let flush_group =
+                    |html: &mut String, num: usize, hash: &str, paths: &[String]| {
+                        let gallery_href = gallery_href_for_hash(hash);
+                        html.push_str(&format!(
+                            r#"<div class="group"><h3><a href="{gallery_href}" target="_blank" class="group-link">Group {num}</a></h3><ul>"#
+                        ));
+                        for p in paths {
+                            html.push_str(&format!(
+                                "<li><code>{}</code></li>",
+                                esc(p)
+                            ));
+                        }
+                        html.push_str("</ul></div>");
+                    };
 
                 for item in &data {
                     if item.group_hash != current_hash {
                         if group_num > 0 {
-                            html.push_str("</ul></div>");
+                            flush_group(&mut html, group_num, &current_hash, &group_paths);
                         }
                         group_num += 1;
-                        html.push_str(&format!(
-                            r#"<div class="group"><h3>Group {group_num}</h3><ul>"#
-                        ));
                         current_hash = item.group_hash.clone();
+                        group_paths.clear();
                     }
-                    html.push_str(&format!(
-                        "<li><code>{}</code></li>",
-                        esc(&item.path)
-                    ));
+                    group_paths.push(item.path.clone());
                 }
                 if group_num > 0 {
-                    html.push_str("</ul></div>");
+                    flush_group(&mut html, group_num, &current_hash, &group_paths);
                 }
                 html.push_str("</div>");
                 Html(html)
@@ -262,14 +275,257 @@ pub async fn random(
             Html(r#"<p class="muted">No images in db.</p>"#.to_string())
         }
         Ok(data) => {
-            let mut html = String::from(r#"<ul class="random-list">"#);
-            for item in &data {
-                html.push_str(&format!("<li><code>{}</code></li>", esc(&item.path)));
+            let paths: Vec<String> = data.iter().map(|d| d.path.clone()).collect();
+            let gallery_href = gallery_href_for_paths(&paths);
+            let count = paths.len();
+
+            let mut html = format!(
+                r#"<div class="random-header"><a href="{gallery_href}" target="_blank" class="view-btn">View all {count} in browser</a></div>"#
+            );
+            html.push_str(r#"<ul class="random-list">"#);
+            for p in &paths {
+                html.push_str(&format!("<li><code>{}</code></li>", esc(p)));
             }
             html.push_str("</ul>");
             Html(html)
         }
     }
+}
+
+// ── Gallery ───────────────────────────────────────────────────────────────────
+
+/// Accepts either `?hash=<group_hash>` or repeated `?path=<abs_path>` params.
+/// Uses RawQuery instead of Query<T> because serde_urlencoded does not support
+/// Vec<String> from repeated keys (fails when only a single value is present).
+pub async fn gallery(
+    State(pool): State<SqlitePool>,
+    RawQuery(raw): RawQuery,
+) -> Html<String> {
+    let query_str = raw.unwrap_or_default();
+    let mut hash: Option<String> = None;
+    let mut path_params: Vec<String> = Vec::new();
+
+    for pair in query_str.split('&') {
+        if let Some((k, v)) = pair.split_once('=') {
+            let value = percent_decode(v);
+            match k {
+                "hash" => hash = Some(value),
+                "path" => path_params.push(value),
+                _ => {}
+            }
+        }
+    }
+
+    let paths: Vec<String> = if let Some(ref h) = hash {
+        match crate::db::images_for_group(&pool, h).await {
+            Ok(data) => data.into_iter().map(|d| d.path).collect(),
+            Err(e) => return Html(simple_error_page(&e.to_string())),
+        }
+    } else {
+        path_params
+    };
+
+    if paths.is_empty() {
+        return Html(simple_error_page("No images found for this query."));
+    }
+
+    Html(build_gallery_page(&paths))
+}
+
+// ── Image File ────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct ImageQuery {
+    path: String,
+}
+
+pub async fn image_file(
+    State(pool): State<SqlitePool>,
+    Query(params): Query<ImageQuery>,
+) -> axum::response::Response {
+    use axum::body::Body;
+    use axum::http::{header, StatusCode};
+
+    // Gate: only serve paths tracked in the database.
+    match crate::db::path_exists_in_db(&pool, &params.path).await {
+        Ok(true) => {}
+        Ok(false) => {
+            return axum::response::Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .header(header::CONTENT_TYPE, "text/plain")
+                .body(Body::from("Path not in database"))
+                .unwrap();
+        }
+        Err(e) => {
+            return axum::response::Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .header(header::CONTENT_TYPE, "text/plain")
+                .body(Body::from(format!("DB error: {e}")))
+                .unwrap();
+        }
+    }
+
+    // Read the file from disk.
+    let bytes = match tokio::fs::read(&params.path).await {
+        Ok(b) => b,
+        Err(_) => {
+            return axum::response::Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .header(header::CONTENT_TYPE, "text/plain")
+                .body(Body::from("File not found"))
+                .unwrap();
+        }
+    };
+
+    // Detect MIME type via magic bytes.
+    let mime = infer::get(&bytes)
+        .map(|t| t.mime_type())
+        .unwrap_or("application/octet-stream");
+
+    axum::response::Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, mime)
+        .header(header::CACHE_CONTROL, "public, max-age=3600")
+        .body(Body::from(bytes))
+        .unwrap()
+}
+
+// ── Gallery page builder ──────────────────────────────────────────────────────
+
+fn build_gallery_page(paths: &[String]) -> String {
+    let count = paths.len();
+    let title = format!("Gallery — {count} image{}", if count == 1 { "" } else { "s" });
+
+    let mut cards = String::new();
+    for p in paths {
+        let filename = Path::new(p)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| p.clone());
+        let img_src = format!("/api/image?path={}", url_encode(p));
+        cards.push_str(&format!(
+            r#"<div class="card">
+  <a href="{img_src_html}" target="_blank" rel="noopener">
+    <img src="{img_src_html}" loading="lazy" alt="{alt}" />
+  </a>
+  <p class="name" title="{path_title}">{filename_html}</p>
+</div>"#,
+            img_src_html = esc(&img_src),
+            alt = esc(&filename),
+            path_title = esc(p),
+            filename_html = esc(&filename),
+        ));
+    }
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title} | idup</title>
+  <style>
+    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, monospace;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }}
+    header {{
+      background: #1a1d27;
+      border-bottom: 1px solid #2d3148;
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+    }}
+    header .logo {{
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #7c6af7;
+      letter-spacing: 0.05em;
+    }}
+    header h1 {{
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #94a3b8;
+    }}
+    header h1 span {{ color: #a78bfa; }}
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 1rem;
+      padding: 1.5rem;
+    }}
+    .card {{
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.15s;
+    }}
+    .card:hover {{ border-color: #7c6af7; }}
+    .card a {{
+      display: block;
+      aspect-ratio: 1;
+      overflow: hidden;
+      background: #0f1117;
+    }}
+    .card img {{
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      transition: opacity 0.2s;
+    }}
+    .card img:hover {{ opacity: 0.85; }}
+    .card .name {{
+      padding: 0.4rem 0.6rem;
+      font-size: 0.72rem;
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border-top: 1px solid #2d3148;
+    }}
+    .empty {{
+      padding: 3rem;
+      color: #64748b;
+      font-size: 0.875rem;
+    }}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">idup</div>
+    <h1><span>{title}</span></h1>
+  </header>
+  <div class="grid">
+    {cards}
+  </div>
+</body>
+</html>"#,
+        title = esc(&title),
+        cards = cards,
+    )
+}
+
+fn simple_error_page(msg: &str) -> String {
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Error | idup</title>
+<style>
+  body {{ font-family: monospace; background: #0f1117; color: #f87171; padding: 2rem; }}
+</style>
+</head>
+<body><p>{}</p></body>
+</html>"#,
+        esc(msg)
+    )
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -283,4 +539,71 @@ fn esc(s: &str) -> String {
 
 fn err_html(msg: &str) -> String {
     format!(r#"<div class="result-error">{}</div>"#, esc(msg))
+}
+
+/// Decode a percent-encoded URL query-parameter value.
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(hi), Some(lo)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
+                out.push((hi << 4 | lo) as char);
+                i += 3;
+                continue;
+            }
+        }
+        // `+` is sometimes used to encode a space in query strings.
+        if bytes[i] == b'+' {
+            out.push(' ');
+        } else {
+            out.push(bytes[i] as char);
+        }
+        i += 1;
+    }
+    out
+}
+
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+/// Percent-encode characters that are not safe as a URL query-parameter value.
+fn url_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 8);
+    for b in s.bytes() {
+        match b {
+            // Unreserved characters: leave as-is
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9'
+            | b'-' | b'_' | b'.' | b'~' | b'/' => out.push(b as char),
+            // Everything else: percent-encode
+            _ => {
+                out.push('%');
+                out.push(char::from_digit((b >> 4) as u32, 16).unwrap().to_ascii_uppercase());
+                out.push(char::from_digit((b & 0xf) as u32, 16).unwrap().to_ascii_uppercase());
+            }
+        }
+    }
+    out
+}
+
+/// Build a /gallery URL for a group hash.
+fn gallery_href_for_hash(hash: &str) -> String {
+    format!("/gallery?hash={}", url_encode(hash))
+}
+
+/// Build a /gallery URL from a slice of absolute paths (repeated `path` params).
+fn gallery_href_for_paths(paths: &[String]) -> String {
+    let qs: String = paths
+        .iter()
+        .map(|p| format!("path={}", url_encode(p)))
+        .collect::<Vec<_>>()
+        .join("&");
+    format!("/gallery?{qs}")
 }

@@ -124,6 +124,35 @@ pub async fn random_images(pool: &SqlitePool, n: u32) -> Result<Vec<ImgData>, sq
         .await
 }
 
+/// Returns all image paths that share the given `sha256 imgdata` group hash.
+pub async fn images_for_group(
+    pool: &SqlitePool,
+    group_hash: &str,
+) -> Result<Vec<ImgData>, sqlx::Error> {
+    let query = "
+        SELECT i.path AS path
+        FROM images i
+        JOIN hashes h ON i.images_id = h.images_id
+        WHERE h.kind = 'sha256 imgdata'
+          AND h.hash = ?
+        ORDER BY i.path;
+    ";
+    query_as::<_, ImgData>(query)
+        .bind(group_hash)
+        .fetch_all(pool)
+        .await
+}
+
+/// Returns true if the given absolute path is tracked in the database.
+pub async fn path_exists_in_db(pool: &SqlitePool, path: &str) -> Result<bool, sqlx::Error> {
+    let count: i64 =
+        query_scalar("SELECT COUNT(*) FROM images WHERE path = ?")
+            .bind(path)
+            .fetch_one(pool)
+            .await?;
+    Ok(count > 0)
+}
+
 pub async fn clear_hashes_for_path(pool: &SqlitePool, path: &Path) -> Result<(), sqlx::Error> {
     let path = normalize_path(path);
 

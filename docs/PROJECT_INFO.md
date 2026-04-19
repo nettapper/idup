@@ -19,6 +19,9 @@ The name is short for **image duplicates**.
 | Image processing | image 0.25 |
 | File type detection | infer 0.19.0 (magic-byte MIME detection) |
 | Logging | env_logger 0.11.8 (controlled via `RUST_LOG`) |
+| Web server | axum 0.8 |
+| Web UI | htmx 2.0 (CDN), hand-written HTML/CSS |
+| Browser launching | open 5 |
 
 ---
 
@@ -29,6 +32,9 @@ idup/
 ├── Cargo.toml          # Package manifest and direct dependencies
 ├── Cargo.lock          # Locked dependency tree
 ├── README.md           # Brief description and perf notes
+├── assets/
+│   ├── index.html      # Main web UI (SPA using htmx)
+│   └── style.css       # Shared stylesheet for web UI
 ├── docs/
 │   └── PROJECT_INFO.md # This file
 └── src/
@@ -39,8 +45,11 @@ idup/
     │   ├── mod.rs      # Shared hash types (ImgHash, ImgHashKind) and Hamming distance
     │   ├── phash.rs    # Perceptual hash (average hash) — resize to 8x8, compare to mean
     │   └── sha256.rs   # Hand-rolled SHA-256 implementation
-    └── scan/
-        └── mod.rs      # Filesystem traversal and hashing orchestration
+    ├── scan/
+    │   └── mod.rs      # Filesystem traversal and hashing orchestration
+    └── web/
+        ├── mod.rs      # Axum router setup and server startup
+        └── handlers.rs # HTTP handlers for all routes
 ```
 
 ---
@@ -72,7 +81,37 @@ SQLite schema with 3 tables:
 - `hashes(images_id FK, kind TEXT, hash TEXT)` — multiple hashes per image
 - `partial_hashes(images_id FK, sequence INT, part_hash TEXT)` — pHash split into 4-byte chunks for future indexed fuzzy lookup
 
+Key public functions:
+
+| Function | Description |
+|---|---|
+| `open_pool()` | Opens (or creates) the SQLite pool and runs schema migrations |
+| `exact_match(pool, path)` | Returns files sharing a sha256 hash with the given path |
+| `exact_matches_grouped(pool)` | Returns all duplicate groups ordered by hash |
+| `images_for_group(pool, hash)` | Returns all paths that share a given `sha256 imgdata` hash — used by `/gallery?hash=` |
+| `path_exists_in_db(pool, path)` | Returns true if the absolute path is tracked in the DB — used to gate `/api/image` |
+| `random_images(pool, n)` | Returns N randomly ordered image paths |
+| `save(pool, img)` | Upserts an image and its hash |
+| `clear_hashes_for_path(pool, path)` | Deletes all hashes for a given path |
+
 DB location: `$XDG_DATA_HOME/idup/idup.db3` (defaults to `~/.local/share/idup/idup.db3`). Created automatically on first run. Includes an in-band schema migration to fix the `hashes` primary key (recreates as `hashes_v2` if old schema detected).
+
+### `src/web/mod.rs` and `src/web/handlers.rs`
+Axum-based web server started by `idup web`. Serves a single-page UI (`assets/index.html`) that uses htmx to call JSON/HTML fragment endpoints. Also serves a standalone gallery page for viewing images.
+
+Routes:
+
+| Route | Handler | Description |
+|---|---|---|
+| `GET /` | `index` | Main SPA (index.html) |
+| `GET /style.css` | `style` | Shared stylesheet |
+| `POST /api/scan` | `scan` | Run a scan and return result fragment |
+| `GET /api/list` | `list` | List duplicate groups (htmx fragment); group headers link to `/gallery` |
+| `GET /api/info` | `info` | pHash + SHA-256 for a single file |
+| `POST /api/compare` | `compare` | Hamming distance between two images |
+| `GET /api/random` | `random` | N random paths; includes "View All in Browser" button |
+| `GET /api/image` | `image_file` | Serve a local image by absolute path (DB-gated) |
+| `GET /gallery` | `gallery` | Standalone image grid page; accepts `?hash=` or repeated `?path=` params |
 
 ---
 
@@ -84,9 +123,19 @@ idup list [<path>]               # List all exact duplicates (optionally for a s
 idup random [N]                  # Return N random files from the db (default: 20)
 idup info <file>                 # Print phash + sha256 of a single file
 idup compare <img1> <img2>       # Print phash of both images and their Hamming distance
+idup web [--port N] [--open]     # Start the web UI (default port: 3000)
 idup clean                       # (stub) Remove outdated DB entries
 idup update                      # (stub) Recompute hashes for existing DB entries
 ```
+
+## Web UI Features
+
+The `idup web` command starts a local HTTP server. The UI has panels for each CLI operation (scan, list, info, compare, random) plus image viewing:
+
+- **List panel**: Each duplicate group header is a clickable link that opens a gallery in a new browser tab showing all images in that group.
+- **Random panel**: After fetching results, a "View All in Browser" button appears that opens a gallery of all returned images in a new tab.
+- **Gallery page** (`/gallery`): Standalone dark-themed image grid. Accepts either a `?hash=<group_hash>` query param (resolves from DB) or repeated `?path=<abs_path>` params.
+- **Image serving** (`/api/image`): Serves local image files by absolute path. Access is gated: only paths tracked in the idup DB are served.
 
 ---
 
@@ -94,11 +143,13 @@ idup update                      # (stub) Recompute hashes for existing DB entri
 
 - **Dual hashing**: Each image gets a perceptual hash (for near-duplicate/fuzzy matching) and pixel-data SHA-256 across 8 orientations (for exact duplicate detection including rotations/flips).
 - **Hand-rolled SHA-256**: Written from scratch as a learning exercise with full unit tests against known vectors. Not a production crypto dependency.
-- **Magic-byte file detection**: `infer` inspects file bytes rather than relying on file extensions.
+- **Magic-byte file detection**: `infer` inspects file bytes rather than relying on file extensions. Also used by `/api/image` to set the correct `Content-Type` response header.
 - **Partial hash table**: `partial_hashes` splits pHash into 4-byte chunks with sequence numbers, laying groundwork for indexed fuzzy lookup (not yet surfaced in the CLI).
 - **Stack-based DFS traversal**: Avoids recursion-related stack overflows on deep directory trees.
 - **Schema migration inline**: No migration framework; schema setup and the `hashes` PK fix are handled in `setup_db()` at startup.
-- **No external services**: Entirely self-contained. No network access, no cloud storage, no external APIs.
+- **Web image serving is DB-gated**: `/api/image` only serves files whose absolute path is already tracked in the idup database. This prevents arbitrary file system access.
+- **Gallery page is server-rendered**: The `/gallery` handler builds the full HTML string in Rust (no template engine). Paths are embedded directly into `<img src="/api/image?path=...">` tags with percent-encoded URLs.
+- **No external services**: Entirely self-contained. The web UI loads htmx from a CDN but otherwise requires no network access.
 
 ---
 

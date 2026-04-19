@@ -16,6 +16,8 @@ pub async fn serve(port: u16, open_browser: bool, pool: SqlitePool) {
         .route("/api/info", get(handlers::info))
         .route("/api/compare", post(handlers::compare))
         .route("/api/random", get(handlers::random))
+        .route("/api/image", get(handlers::image_file))
+        .route("/gallery", get(handlers::gallery))
         .with_state(pool)
         .layer(CorsLayer::permissive());
 
