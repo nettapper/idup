@@ -116,6 +116,14 @@ pub async fn save(pool: &SqlitePool, img: &ImgHash) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+pub async fn random_images(pool: &SqlitePool, n: u32) -> Result<Vec<ImgData>, sqlx::Error> {
+    let query = "SELECT path FROM images ORDER BY RANDOM() LIMIT ?";
+    query_as::<_, ImgData>(query)
+        .bind(n)
+        .fetch_all(pool)
+        .await
+}
+
 pub async fn clear_hashes_for_path(pool: &SqlitePool, path: &Path) -> Result<(), sqlx::Error> {
     let path = normalize_path(path);
 

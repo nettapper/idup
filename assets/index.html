@@ -15,6 +15,7 @@
   <a href="#" data-panel="list">list</a>
   <a href="#" data-panel="info">info</a>
   <a href="#" data-panel="compare">compare</a>
+  <a href="#" data-panel="random">random</a>
 </nav>
 
 <main>
@@ -66,6 +67,21 @@
     </form>
     <span id="info-spinner" class="htmx-indicator">hashing…</span>
     <div id="info-result" class="result-box"></div>
+  </section>
+
+  <!-- Random -->
+  <section id="panel-random" class="panel">
+    <h2>Random</h2>
+    <p class="muted" style="margin-bottom:1rem">Return N random files from the db.</p>
+    <form hx-get="/api/random" hx-target="#random-result" hx-swap="innerHTML" hx-indicator="#random-spinner">
+      <label>
+        Count
+        <input type="number" name="n" value="20" min="1" />
+      </label>
+      <button type="submit">Fetch</button>
+    </form>
+    <span id="random-spinner" class="htmx-indicator">querying…</span>
+    <div id="random-result" class="result-box"></div>
   </section>
 
   <!-- Compare -->

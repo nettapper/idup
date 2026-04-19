@@ -60,6 +60,13 @@ enum Command {
         img2: PathBuf,
     },
 
+    /// Return N random files from the db
+    Random {
+        /// Number of files to return
+        #[arg(default_value_t = 20)]
+        n: u32,
+    },
+
     /// Serve a web UI for browsing duplicates
     Web {
         /// Port to listen on
@@ -144,6 +151,18 @@ async fn main() -> sqlx::Result<()> {
                         for item in &data {
                             println!("{}", item.path);
                         }
+                    }
+                }
+            }
+        }
+
+        Command::Random { n } => {
+            match db::random_images(&pool, n).await {
+                Err(e) => eprintln!("Error: {e}"),
+                Ok(data) if data.is_empty() => println!("No images in db."),
+                Ok(data) => {
+                    for item in &data {
+                        println!("{}", item.path);
                     }
                 }
             }

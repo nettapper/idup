@@ -81,6 +81,7 @@ DB location: `$XDG_DATA_HOME/idup/idup.db3` (defaults to `~/.local/share/idup/id
 ```
 idup scan <path> [--recursive]   # Scan path, compute and store hashes
 idup list [<path>]               # List all exact duplicates (optionally for a specific file)
+idup random [N]                  # Return N random files from the db (default: 20)
 idup info <file>                 # Print phash + sha256 of a single file
 idup compare <img1> <img2>       # Print phash of both images and their Hamming distance
 idup clean                       # (stub) Remove outdated DB entries

@@ -210,6 +210,35 @@ pub async fn compare(Form(form): Form<CompareForm>) -> Html<String> {
     ))
 }
 
+// ── Random ────────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct RandomQuery {
+    n: Option<u32>,
+}
+
+pub async fn random(
+    State(pool): State<SqlitePool>,
+    Query(params): Query<RandomQuery>,
+) -> Html<String> {
+    let n = params.n.unwrap_or(20);
+
+    match crate::db::random_images(&pool, n).await {
+        Err(e) => Html(err_html(&e.to_string())),
+        Ok(data) if data.is_empty() => {
+            Html(r#"<p class="muted">No images in db.</p>"#.to_string())
+        }
+        Ok(data) => {
+            let mut html = String::from(r#"<ul class="random-list">"#);
+            for item in &data {
+                html.push_str(&format!("<li><code>{}</code></li>", esc(&item.path)));
+            }
+            html.push_str("</ul>");
+            Html(html)
+        }
+    }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn esc(s: &str) -> String {
