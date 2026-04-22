@@ -99,6 +99,8 @@ button[type="submit"] {
   transition: background 0.15s;
 }
 button[type="submit"]:hover { background: #6b5ce7; }
+button[type="submit"].btn-danger { background: #7f1d1d; color: #fca5a5; }
+button[type="submit"].btn-danger:hover { background: #991b1b; }
 
 /* ── Result area ────────────────────────── */
 .result-box {

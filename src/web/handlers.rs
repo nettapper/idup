@@ -135,6 +135,18 @@ pub async fn update(
     ))
 }
 
+// ── Clean ─────────────────────────────────────────────────────────────────────
+
+pub async fn clean(State(pool): State<SqlitePool>) -> Html<String> {
+    match crate::db::wipe_db(&pool).await {
+        Ok(()) => Html(
+            r#"<div class="result-success">Database wiped. All images and hashes have been deleted.</div>"#
+                .to_string(),
+        ),
+        Err(e) => Html(err_html(&e.to_string())),
+    }
+}
+
 // ── List ──────────────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]

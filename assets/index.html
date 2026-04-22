@@ -17,6 +17,7 @@
   <a href="#" data-panel="info">info</a>
   <a href="#" data-panel="random">random</a>
   <a href="#" data-panel="explore">explore</a>
+  <a href="#" data-panel="clean">clean</a>
 </nav>
 
 <main>
@@ -151,6 +152,19 @@
     </form>
     <span id="random-spinner" class="htmx-indicator">querying…</span>
     <div id="random-result" class="result-box"></div>
+  </section>
+
+
+  <!-- Clean -->
+  <section id="panel-clean" class="panel">
+    <h2>Clean</h2>
+    <p class="muted" style="margin-bottom:1rem">Wipe all data from the database (images, hashes, partial hashes).</p>
+    <form hx-post="/api/clean" hx-target="#clean-result" hx-swap="innerHTML" hx-indicator="#clean-spinner"
+          hx-confirm="This will wipe the entire database. This cannot be undone. Are you sure?">
+      <button type="submit" class="btn-danger">Wipe Database</button>
+    </form>
+    <span id="clean-spinner" class="htmx-indicator">wiping…</span>
+    <div id="clean-result" class="result-box"></div>
   </section>
 
 </main>

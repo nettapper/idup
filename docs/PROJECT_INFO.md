@@ -128,6 +128,7 @@ Routes:
 | `GET /api/random` | `random` | N seeded-random paths; includes "View All in Browser" button linking to `/explore` |
 | `GET /api/image` | `image_file` | Serve a local image by absolute path (DB-gated) |
 | `GET /explore` | `explore` | Unified standalone image browser; accepts `?dir=`, `?filter=`, `?hash=`, or `?seed=&n=` |
+| `POST /api/clean` | `clean` | Wipe all data from the database (images, hashes, partial hashes) |
 
 ---
 
@@ -150,6 +151,7 @@ The `idup web` command starts a local HTTP server. The UI has panels for each CL
 
 - **List panel**: Each duplicate group header is a clickable link that opens `/explore?hash=<hash>` in a new browser tab.
 - **Random panel**: After fetching results, a "View All in Browser" button links to `/explore?seed=<seed>&n=<n>&filter=<filter>`, allowing deterministic replay of the exact same random selection.
+- **Clean panel**: Wipes the entire database. A browser `confirm()` dialog (via htmx `hx-confirm`) prompts the user before the request is sent.
 - **Explore panel**: Opens `/explore` in a new tab with optional starting directory and glob filter.
 - **Explore page** (`/explore`): Unified standalone image browser. Accepts:
   - `?dir=<path>` — directory browser showing subdirectory cards + images in the current dir, with breadcrumb navigation

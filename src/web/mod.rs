@@ -13,6 +13,7 @@ pub async fn serve(port: u16, open_browser: bool, pool: SqlitePool) {
         .route("/style.css", get(handlers::style))
         .route("/api/scan", post(handlers::scan))
         .route("/api/update", post(handlers::update))
+        .route("/api/clean", post(handlers::clean))
         .route("/api/list", get(handlers::list))
         .route("/api/info", get(handlers::info))
         .route("/api/random", get(handlers::random))
