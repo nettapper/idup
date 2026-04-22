@@ -113,8 +113,6 @@ async fn main() -> sqlx::Result<()> {
 
     match cli.command {
         Command::Info { file } => {
-            // calculate it's phash and print it
-            // TODO I need better error handling
             match hash::phash::hash_path(&file) {
                 Ok(ph) => println!("phash: {:?}", ph),
                 Err(err) => println!("phash err: {}", err),
@@ -143,10 +141,6 @@ async fn main() -> sqlx::Result<()> {
         }
 
         Command::List { path } => {
-            // List matches of file
-            // TODO future features
-            // - if dir, find all matches that fall under the parent
-            // - optins to do exact match (sha256) or fuzzy (phash)
             match path {
                 None => {
                     let data = db::exact_matches_grouped(&pool).await.unwrap();
