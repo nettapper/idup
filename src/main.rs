@@ -84,18 +84,6 @@ enum Command {
         file: PathBuf,
     },
 
-    /// Print information about two files
-    Compare {
-        // TODO should I make this 2..n files?
-        // TODO should this & info be merged?
-        /// File 1
-        #[arg(value_parser = clap::value_parser!(std::path::PathBuf))]
-        img1: PathBuf,
-        /// File 2
-        #[arg(value_parser = clap::value_parser!(std::path::PathBuf))]
-        img2: PathBuf,
-    },
-
     /// Return N random files from the db
     Random {
         /// Number of files to return
@@ -134,21 +122,6 @@ async fn main() -> sqlx::Result<()> {
             match hash::sha256::hash_path(&file) {
                 Ok(sh) => println!("sha256: {:?}", sh),
                 Err(err) => println!("sha256 err: {}", err),
-            }
-        }
-
-        Command::Compare { img1, img2 } => {
-            // calculate both phashes, and dist
-            let hash1 = hash::phash::hash_path(&img1).unwrap();
-            println!("img1: {:?}", hash1);
-
-            let hash2 = hash::phash::hash_path(&img2).unwrap();
-            println!("img2: {:?}", hash2);
-
-            let diff = hash::hamming_dist(hash1, hash2);
-            match diff {
-                Ok(val) => println!("diff: {}", val),
-                Err(_) => println!("failed to calculate dist"),
             }
         }
 
