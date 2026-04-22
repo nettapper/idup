@@ -44,6 +44,8 @@ nav a {
 nav a:hover { color: #e2e8f0; background: #222640; }
 nav a.active { color: #a78bfa; border-left-color: #7c6af7; background: #20234a; }
 
+nav hr { border: none; border-top: 1px solid #2d3148; margin: 0.25rem 1.25rem; }
+
 /* ── Main content ────────────────────────── */
 main {
   flex: 1;
