@@ -66,6 +66,15 @@ Defines `Cli` and `Command` via clap derive macros. Opens the SQLite connection 
 3. Computes 1 perceptual hash (pHash).
 4. Saves all hashes to the DB.
 
+### `src/update/mod.rs`
+`process_update(path, cleanup, pool)` — validates and refreshes image hashes in the DB. For each image in the DB (optionally filtered by path):
+1. Checks if the file still exists on disk. If missing and `--cleanup` flag is set, deletes the image from the DB.
+2. Computes the base SHA-256 hash of the image data.
+3. Compares with the base SHA-256 stored in the DB:
+   - If hashes match: marks file as verified.
+   - If hashes don't match: recomputes ALL hash types that exist in the DB for that image (e.g., if DB has `sha256 imgdata`, `sha256 rot90`, `phash`, recomputes all three), and updates them in the DB.
+4. Reports progress every 10 seconds and prints summary statistics (verified, updated, missing, cleaned).
+
 ### `src/hash/phash.rs`
 `hash(img) -> u64` — resizes to 8×8, converts to grayscale, computes mean pixel value, produces a 64-bit integer where each bit is 1 if the corresponding pixel is above-mean. Low Hamming distance between two pHashes indicates perceptual similarity.
 
@@ -125,7 +134,7 @@ idup info <file>                 # Print phash + sha256 of a single file
 idup compare <img1> <img2>       # Print phash of both images and their Hamming distance
 idup web [--port N] [--open]     # Start the web UI (default port: 3000)
 idup clean                       # (stub) Remove outdated DB entries
-idup update                      # (stub) Recompute hashes for existing DB entries
+idup update [PATH] [--cleanup]   # Validate and refresh image hashes in the DB
 ```
 
 ## Web UI Features

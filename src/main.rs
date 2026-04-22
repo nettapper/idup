@@ -5,6 +5,7 @@ use std::path::PathBuf;
 mod db;
 mod hash;
 mod scan;
+mod update;
 mod web;
 
 #[derive(Debug, Parser)]
@@ -76,7 +77,15 @@ enum Command {
     Clean,
 
     /// Recompute hashes of files in db
-    Update,
+    Update {
+        /// File or directory to update (if not provided, updates all images)
+        #[arg(value_parser = clap::value_parser!(std::path::PathBuf))]
+        path: Option<PathBuf>,
+
+        /// Delete images from database if their files no longer exist
+        #[arg(long)]
+        cleanup: bool,
+    },
 
     /// Print information about a particular file
     Info {
@@ -207,8 +216,8 @@ async fn main() -> sqlx::Result<()> {
             web::serve(port, open, pool).await;
         }
 
-        _ => {
-            println!("This functionality is currently being worked on");
+        Command::Update { path, cleanup } => {
+            update::process_update(path, cleanup, &pool).await;
         }
     }
 

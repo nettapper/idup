@@ -218,6 +218,81 @@ pub async fn clear_hashes_for_path(pool: &SqlitePool, path: &Path) -> Result<(),
     Ok(())
 }
 
+/// Get all image paths from the database, optionally filtered by a directory prefix.
+pub async fn get_all_images(pool: &SqlitePool, filter_path: Option<&str>) -> Result<Vec<ImgData>, sqlx::Error> {
+    match filter_path {
+        None => {
+            query_as::<_, ImgData>("SELECT path FROM images ORDER BY path")
+                .fetch_all(pool)
+                .await
+        }
+        Some(dir) => {
+            // Return all paths that start with the given directory prefix
+            let dir = dir.trim_end_matches('/');
+            let pattern = format!("{}%", dir);
+            query_as::<_, ImgData>("SELECT path FROM images WHERE path LIKE ? ORDER BY path")
+                .bind(pattern)
+                .fetch_all(pool)
+                .await
+        }
+    }
+}
+
+/// Get all hash kinds stored for a given image path.
+#[derive(Debug, FromRow)]
+pub struct HashKindRow {
+    pub kind: String,
+}
+
+pub async fn get_hash_kinds_for_image(pool: &SqlitePool, path: &str) -> Result<Vec<String>, sqlx::Error> {
+    let results: Vec<HashKindRow> = query_as::<_, HashKindRow>(
+        "SELECT DISTINCT kind FROM hashes WHERE images_id = (SELECT images_id FROM images WHERE path = ?)"
+    )
+    .bind(path)
+    .fetch_all(pool)
+    .await?;
+    
+    Ok(results.into_iter().map(|r| r.kind).collect())
+}
+
+/// Get a single hash from the database for a given path and kind.
+#[derive(Debug, FromRow)]
+pub struct HashRow {
+    pub hash: String,
+}
+
+pub async fn get_single_hash(pool: &SqlitePool, path: &str, kind: &str) -> Result<Option<String>, sqlx::Error> {
+    let result: Option<HashRow> = query_as::<_, HashRow>(
+        "SELECT hash FROM hashes WHERE images_id = (SELECT images_id FROM images WHERE path = ?) AND kind = ?"
+    )
+    .bind(path)
+    .bind(kind)
+    .fetch_optional(pool)
+    .await?;
+    
+    Ok(result.map(|r| r.hash))
+}
+
+/// Delete an image and all its associated hashes from the database.
+pub async fn delete_image(pool: &SqlitePool, path: &str) -> Result<(), sqlx::Error> {
+    query("DELETE FROM partial_hashes WHERE images_id IN (SELECT images_id FROM images WHERE path = ?)")
+        .bind(path)
+        .execute(pool)
+        .await?;
+    
+    query("DELETE FROM hashes WHERE images_id IN (SELECT images_id FROM images WHERE path = ?)")
+        .bind(path)
+        .execute(pool)
+        .await?;
+    
+    query("DELETE FROM images WHERE path = ?")
+        .bind(path)
+        .execute(pool)
+        .await?;
+    
+    Ok(())
+}
+
 async fn existing_image_id(pool: &SqlitePool, path: &str) -> Result<Option<i64>, sqlx::Error> {
     query_as::<_, (i64,)>("SELECT images_id FROM images WHERE path = ?")
         .bind(path)
