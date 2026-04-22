@@ -165,6 +165,96 @@ pub async fn images_in_dir(
         .await
 }
 
+/// Returns the full paths of immediate subdirectories of `dir` that contain at least one image.
+pub async fn subdirs_in_dir(pool: &SqlitePool, dir: &str) -> Result<Vec<String>, sqlx::Error> {
+    let dir = dir.trim_end_matches('/');
+    let prefix = format!("{}/", dir);
+    let pattern = format!("{}%", prefix);
+
+    let rows = query_as::<_, ImgData>("SELECT path FROM images WHERE path LIKE ?")
+        .bind(pattern)
+        .fetch_all(pool)
+        .await?;
+
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for row in &rows {
+        if let Some(rest) = row.path.strip_prefix(&prefix as &str) {
+            if let Some(slash_pos) = rest.find('/') {
+                seen.insert(format!("{}{}", prefix, &rest[..slash_pos]));
+            }
+        }
+    }
+    Ok(seen.into_iter().collect())
+}
+
+/// Returns all images matching a glob `filter`, optionally scoped to paths under `dir`.
+pub async fn images_matching_filter_in_dir(
+    pool: &SqlitePool,
+    dir: Option<&str>,
+    filter: &str,
+) -> Result<Vec<ImgData>, sqlx::Error> {
+    match dir {
+        None => {
+            query_as::<_, ImgData>(
+                "SELECT path FROM images WHERE path GLOB ? ORDER BY path",
+            )
+            .bind(filter)
+            .fetch_all(pool)
+            .await
+        }
+        Some(dir) => {
+            let dir = dir.trim_end_matches('/');
+            let like_pat = format!("{}/", dir) + "%";
+            query_as::<_, ImgData>(
+                "SELECT path FROM images WHERE path GLOB ? AND path LIKE ? ORDER BY path",
+            )
+            .bind(filter)
+            .bind(like_pat)
+            .fetch_all(pool)
+            .await
+        }
+    }
+}
+
+/// Returns up to `n` images in a deterministic pseudo-random order determined by `seed`.
+/// Stable: given the same DB content, seed, and filter, the result is always identical.
+pub async fn random_images_seeded(
+    pool: &SqlitePool,
+    n: u32,
+    filter: Option<&str>,
+    seed: u64,
+) -> Result<Vec<ImgData>, sqlx::Error> {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut rows = match filter {
+        None => {
+            query_as::<_, ImgData>("SELECT path FROM images ORDER BY path")
+                .fetch_all(pool)
+                .await?
+        }
+        Some(pat) => {
+            query_as::<_, ImgData>(
+                "SELECT path FROM images WHERE path GLOB ? ORDER BY path",
+            )
+            .bind(pat)
+            .fetch_all(pool)
+            .await?
+        }
+    };
+
+    // Deterministic pseudo-random order: sort by hash(seed || path).
+    rows.sort_by_key(|row| {
+        let mut h = DefaultHasher::new();
+        seed.hash(&mut h);
+        row.path.hash(&mut h);
+        h.finish()
+    });
+
+    rows.truncate(n as usize);
+    Ok(rows)
+}
+
 /// Returns all image paths that share the given `sha256 imgdata` group hash.
 pub async fn images_for_group(
     pool: &SqlitePool,

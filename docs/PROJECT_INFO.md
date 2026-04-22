@@ -101,16 +101,20 @@ Key public functions:
 | `open_pool()` | Opens (or creates) the SQLite pool and runs schema migrations |
 | `exact_match(pool, path)` | Returns files sharing a sha256 hash with the given path |
 | `exact_matches_grouped(pool)` | Returns all duplicate groups ordered by hash |
-| `images_for_group(pool, hash)` | Returns all paths that share a given `sha256 imgdata` hash — used by `/gallery?hash=` |
+| `images_for_group(pool, hash)` | Returns all paths that share a given `sha256 imgdata` hash — used by `/explore?hash=` |
 | `path_exists_in_db(pool, path)` | Returns true if the absolute path is tracked in the DB — used to gate `/api/image` |
-| `random_images(pool, n)` | Returns N randomly ordered image paths |
+| `random_images(pool, n, filter)` | Returns N randomly ordered image paths (SQLite RANDOM(), no seed) |
+| `random_images_seeded(pool, n, filter, seed)` | Returns N images in deterministic pseudo-random order; same seed+filter = same result |
+| `images_in_dir(pool, dir)` | Returns direct (non-recursive) image children of `dir` |
+| `subdirs_in_dir(pool, dir)` | Returns full paths of immediate subdirectories of `dir` that contain images |
+| `images_matching_filter_in_dir(pool, dir, filter)` | Returns images matching a glob filter, optionally scoped to `dir` |
 | `save(pool, img)` | Upserts an image and its hash |
 | `clear_hashes_for_path(pool, path)` | Deletes all hashes for a given path |
 
 DB location: `$XDG_DATA_HOME/idup/idup.db3` (defaults to `~/.local/share/idup/idup.db3`). Created automatically on first run. Includes an in-band schema migration to fix the `hashes` primary key (recreates as `hashes_v2` if old schema detected).
 
 ### `src/web/mod.rs` and `src/web/handlers.rs`
-Axum-based web server started by `idup web`. Serves a single-page UI (`assets/index.html`) that uses htmx to call JSON/HTML fragment endpoints. Also serves a standalone gallery page for viewing images.
+Axum-based web server started by `idup web`. Serves a single-page UI (`assets/index.html`) that uses htmx to call JSON/HTML fragment endpoints. Also serves a standalone explore page for browsing and viewing images.
 
 Routes:
 
@@ -119,12 +123,11 @@ Routes:
 | `GET /` | `index` | Main SPA (index.html) |
 | `GET /style.css` | `style` | Shared stylesheet |
 | `POST /api/scan` | `scan` | Run a scan and return result fragment |
-| `GET /api/list` | `list` | List duplicate groups (htmx fragment); group headers link to `/gallery` |
+| `GET /api/list` | `list` | List duplicate groups (htmx fragment); group headers link to `/explore?hash=` |
 | `GET /api/info` | `info` | pHash + SHA-256 for a single file |
-| `POST /api/compare` | `compare` | Hamming distance between two images |
-| `GET /api/random` | `random` | N random paths; includes "View All in Browser" button |
+| `GET /api/random` | `random` | N seeded-random paths; includes "View All in Browser" button linking to `/explore` |
 | `GET /api/image` | `image_file` | Serve a local image by absolute path (DB-gated) |
-| `GET /gallery` | `gallery` | Standalone image grid page; accepts `?hash=` or repeated `?path=` params |
+| `GET /explore` | `explore` | Unified standalone image browser; accepts `?dir=`, `?filter=`, `?hash=`, or `?seed=&n=` |
 
 ---
 
@@ -143,11 +146,17 @@ idup update [PATH] [--cleanup]   # Validate and refresh image hashes in the DB
 
 ## Web UI Features
 
-The `idup web` command starts a local HTTP server. The UI has panels for each CLI operation (scan, list, info, compare, random) plus image viewing:
+The `idup web` command starts a local HTTP server. The UI has panels for each CLI operation (scan, list, info, random, explore) plus image viewing:
 
-- **List panel**: Each duplicate group header is a clickable link that opens a gallery in a new browser tab showing all images in that group.
-- **Random panel**: After fetching results, a "View All in Browser" button appears that opens a gallery of all returned images in a new tab.
-- **Gallery page** (`/gallery`): Standalone dark-themed image grid. Accepts either a `?hash=<group_hash>` query param (resolves from DB) or repeated `?path=<abs_path>` params.
+- **List panel**: Each duplicate group header is a clickable link that opens `/explore?hash=<hash>` in a new browser tab.
+- **Random panel**: After fetching results, a "View All in Browser" button links to `/explore?seed=<seed>&n=<n>&filter=<filter>`, allowing deterministic replay of the exact same random selection.
+- **Explore panel**: Opens `/explore` in a new tab with optional starting directory and glob filter.
+- **Explore page** (`/explore`): Unified standalone image browser. Accepts:
+  - `?dir=<path>` — directory browser showing subdirectory cards + images in the current dir, with breadcrumb navigation
+  - `?filter=<glob>` — shows all images in the DB matching the glob (optionally scoped with `?dir=`)
+  - `?hash=<group_hash>` — shows all images in a duplicate group (used by the list panel)
+  - `?seed=<u64>&n=<u32>&filter=<glob>` — deterministic random N images (used by the random panel)
+  - The page always shows a filter bar (dir + glob inputs) for in-page navigation without returning to the SPA.
 - **Image serving** (`/api/image`): Serves local image files by absolute path. Access is gated: only paths tracked in the idup DB are served.
 
 ---

@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Query, RawQuery, State},
+    extract::{Query, State},
     response::Html,
     Form,
 };
@@ -165,9 +165,9 @@ pub async fn list(
                 // Helper closure to flush a completed group
                 let flush_group =
                     |html: &mut String, num: usize, hash: &str, paths: &[String]| {
-                        let gallery_href = gallery_href_for_hash(hash);
+                        let explore_href = explore_href_for_hash(hash);
                         html.push_str(&format!(
-                            r#"<div class="group"><h3><a href="{gallery_href}" target="_blank" class="group-link">Group {num}</a></h3><ul>"#
+                            r#"<div class="group"><h3><a href="{explore_href}" target="_blank" class="group-link">Group {num}</a></h3><ul>"#
                         ));
                         for p in paths {
                             html.push_str(&format!(
@@ -273,18 +273,24 @@ pub async fn random(
     let n = params.n.unwrap_or(20);
     let filter = params.filter.as_deref().filter(|s| !s.trim().is_empty());
 
-    match crate::db::random_images(&pool, n, filter).await {
+    // Generate a seed so /explore can reproduce this exact random selection.
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(42);
+
+    match crate::db::random_images_seeded(&pool, n, filter, seed).await {
         Err(e) => Html(err_html(&e.to_string())),
         Ok(data) if data.is_empty() => {
             Html(r#"<p class="muted">No images in db.</p>"#.to_string())
         }
         Ok(data) => {
             let paths: Vec<String> = data.iter().map(|d| d.path.clone()).collect();
-            let gallery_href = gallery_href_for_paths(&paths);
+            let explore_href = explore_href_seeded(seed, n, filter);
             let count = paths.len();
 
             let mut html = format!(
-                r#"<div class="random-header"><a href="{gallery_href}" target="_blank" class="view-btn">View all {count} in browser</a></div>"#
+                r#"<div class="random-header"><a href="{explore_href}" target="_blank" class="view-btn">View all {count} in browser</a></div>"#
             );
             html.push_str(r#"<ul class="random-list">"#);
             for p in &paths {
@@ -296,51 +302,98 @@ pub async fn random(
     }
 }
 
-// ── Gallery ───────────────────────────────────────────────────────────────────
+// ── Explore ───────────────────────────────────────────────────────────────────
 
-/// Accepts either `?hash=<group_hash>` or repeated `?path=<abs_path>` params.
-/// Uses RawQuery instead of Query<T> because serde_urlencoded does not support
-/// Vec<String> from repeated keys (fails when only a single value is present).
-pub async fn gallery(
+#[derive(Deserialize)]
+pub struct ExploreQuery {
+    dir: Option<String>,
+    filter: Option<String>,
+    hash: Option<String>,
+    seed: Option<u64>,
+    n: Option<u32>,
+}
+
+pub async fn explore(
     State(pool): State<SqlitePool>,
-    RawQuery(raw): RawQuery,
+    Query(params): Query<ExploreQuery>,
 ) -> Html<String> {
-    let query_str = raw.unwrap_or_default();
-    let mut hash: Option<String> = None;
-    let mut dir: Option<String> = None;
-    let mut path_params: Vec<String> = Vec::new();
+    let dir = params.dir.as_deref().filter(|s| !s.trim().is_empty());
+    let filter = params.filter.as_deref().filter(|s| !s.trim().is_empty());
+    let hash = params.hash.as_deref().filter(|s| !s.trim().is_empty());
+    let seed = params.seed;
+    let n = params.n.unwrap_or(20);
 
-    for pair in query_str.split('&') {
-        if let Some((k, v)) = pair.split_once('=') {
-            let value = percent_decode(v);
-            match k {
-                "hash" => hash = Some(value),
-                "dir" => dir = Some(value),
-                "path" => path_params.push(value),
-                _ => {}
-            }
-        }
+    if let Some(h) = hash {
+        let paths = match crate::db::images_for_group(&pool, h).await {
+            Ok(data) => data.into_iter().map(|d| d.path).collect::<Vec<_>>(),
+            Err(e) => return Html(simple_error_page(&e.to_string())),
+        };
+        let count = paths.len();
+        let title = format!(
+            "Explore — {count} image{} (dup group)",
+            if count == 1 { "" } else { "s" }
+        );
+        return Html(build_explore_page(&title, None, None, &[], &paths));
     }
 
-    let paths: Vec<String> = if let Some(ref h) = hash {
-        match crate::db::images_for_group(&pool, h).await {
-            Ok(data) => data.into_iter().map(|d| d.path).collect(),
+    if let Some(seed_val) = seed {
+        let paths = match crate::db::random_images_seeded(&pool, n, filter, seed_val).await {
+            Ok(data) => data.into_iter().map(|d| d.path).collect::<Vec<_>>(),
             Err(e) => return Html(simple_error_page(&e.to_string())),
-        }
-    } else if let Some(ref d) = dir {
-        match crate::db::images_in_dir(&pool, d).await {
-            Ok(data) => data.into_iter().map(|d| d.path).collect(),
+        };
+        let count = paths.len();
+        let title = format!(
+            "Explore — {count} random image{}",
+            if count == 1 { "" } else { "s" }
+        );
+        return Html(build_explore_page(&title, None, filter, &[], &paths));
+    }
+
+    if let Some(f) = filter {
+        let paths = match crate::db::images_matching_filter_in_dir(&pool, dir, f).await {
+            Ok(data) => data.into_iter().map(|d| d.path).collect::<Vec<_>>(),
             Err(e) => return Html(simple_error_page(&e.to_string())),
-        }
-    } else {
-        path_params
+        };
+        let title = if let Some(d) = dir {
+            format!("Explore — {} in {}", f, d)
+        } else {
+            format!("Explore — {}", f)
+        };
+        return Html(build_explore_page(&title, dir, Some(f), &[], &paths));
+    }
+
+    if let Some(d) = dir {
+        let (subdirs_res, images_res) = tokio::join!(
+            crate::db::subdirs_in_dir(&pool, d),
+            crate::db::images_in_dir(&pool, d),
+        );
+        let subdirs = match subdirs_res {
+            Ok(s) => s,
+            Err(e) => return Html(simple_error_page(&e.to_string())),
+        };
+        let paths = match images_res {
+            Ok(p) => p.into_iter().map(|d| d.path).collect::<Vec<_>>(),
+            Err(e) => return Html(simple_error_page(&e.to_string())),
+        };
+        let title = format!("Explore — {d}");
+        return Html(build_explore_page(&title, Some(d), None, &subdirs, &paths));
+    }
+
+    // No params: default to "/" so the top-level directories are shown
+    let d = "/";
+    let (subdirs_res, images_res) = tokio::join!(
+        crate::db::subdirs_in_dir(&pool, d),
+        crate::db::images_in_dir(&pool, d),
+    );
+    let subdirs = match subdirs_res {
+        Ok(s) => s,
+        Err(e) => return Html(simple_error_page(&e.to_string())),
     };
-
-    if paths.is_empty() {
-        return Html(simple_error_page("No images found for this query."));
-    }
-
-    Html(build_gallery_page(&paths))
+    let paths = match images_res {
+        Ok(p) => p.into_iter().map(|d| d.path).collect::<Vec<_>>(),
+        Err(e) => return Html(simple_error_page(&e.to_string())),
+    };
+    Html(build_explore_page("Explore", Some(d), None, &subdirs, &paths))
 }
 
 // ── Image File ────────────────────────────────────────────────────────────────
@@ -401,83 +454,239 @@ pub async fn image_file(
         .unwrap()
 }
 
-// ── Gallery page builder ──────────────────────────────────────────────────────
+// ── Explore page builder ──────────────────────────────────────────────────────
 
-fn build_gallery_page(paths: &[String]) -> String {
-    let count = paths.len();
-    let title = format!("Gallery — {count} image{}", if count == 1 { "" } else { "s" });
+fn build_explore_page(
+    title: &str,
+    dir: Option<&str>,
+    filter: Option<&str>,
+    subdirs: &[String],
+    paths: &[String],
+) -> String {
+    let dir_value = dir.map(esc).unwrap_or_default();
+    let filter_value = filter.map(esc).unwrap_or_default();
+    let breadcrumb_html = dir.map(|d| build_breadcrumb_html(d)).unwrap_or_default();
+    let content_html = build_explore_content(dir, filter, subdirs, paths);
 
-    let mut cards = String::new();
-    for p in paths {
-        let filename = Path::new(p)
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| p.clone());
-        let dir = Path::new(p)
-            .parent()
-            .map(|d| d.to_string_lossy().to_string())
-            .unwrap_or_default();
-        let img_src = format!("/api/image?path={}", url_encode(p));
-        cards.push_str(&format!(
-            r#"<div class="card" data-path="{data_path}" data-filename="{data_filename}" data-dir="{data_dir}" data-img-src="{data_img_src}">
-  <div class="card-img">
-    <img src="{img_src_html}" loading="lazy" alt="{alt}" />
-  </div>
-  <p class="name" title="{path_title}">{filename_html}</p>
-</div>"#,
-            data_path = esc(p),
-            data_filename = esc(&filename),
-            data_dir = esc(&dir),
-            data_img_src = esc(&img_src),
-            img_src_html = esc(&img_src),
-            alt = esc(&filename),
-            path_title = esc(p),
-            filename_html = esc(&filename),
-        ));
+    let mut out = String::with_capacity(32_768);
+    out.push_str("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n");
+    out.push_str("  <meta charset=\"UTF-8\" />\n");
+    out.push_str("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n");
+    out.push_str(&format!("  <title>{} | idup</title>\n", esc(title)));
+    out.push_str("  <style>");
+    out.push_str(EXPLORE_CSS);
+    out.push_str("  </style>\n</head>\n<body>\n");
+    out.push_str("  <header>\n    <div class=\"logo\">idup</div>\n");
+    out.push_str("    <form class=\"filter-bar\" method=\"get\" action=\"/explore\">\n");
+    out.push_str(&format!(
+        "      <input type=\"text\" name=\"dir\" placeholder=\"Directory path...\" value=\"{}\" />\n",
+        dir_value
+    ));
+    out.push_str(&format!(
+        "      <input type=\"text\" name=\"filter\" placeholder=\"Glob filter (e.g. *.jpg)\" value=\"{}\" />\n",
+        filter_value
+    ));
+    out.push_str("      <button type=\"submit\">Go</button>\n    </form>\n  </header>\n");
+    out.push_str(&breadcrumb_html);
+    out.push_str(&content_html);
+    out.push_str(EXPLORE_MODAL_HTML);
+    out.push_str(EXPLORE_SCRIPT);
+    out.push_str("</body>\n</html>\n");
+    out
+}
+
+fn build_breadcrumb_html(dir: &str) -> String {
+    let parts: Vec<&str> = dir.split('/').filter(|s| !s.is_empty()).collect();
+    let mut html = String::from("  <nav class=\"breadcrumb\">");
+    if parts.is_empty() {
+        // At filesystem root — show "root" as the current (non-linked) crumb
+        html.push_str("<span class=\"current\">root</span>");
+    } else {
+        html.push_str("<a href=\"/explore\">root</a>");
+        let mut cumulative = String::new();
+        for (i, part) in parts.iter().enumerate() {
+            cumulative.push('/');
+            cumulative.push_str(part);
+            html.push_str("<span class=\"sep\">/</span>");
+            if i + 1 == parts.len() {
+                html.push_str(&format!("<span class=\"current\">{}</span>", esc(part)));
+            } else {
+                let href = format!("/explore?dir={}", url_encode(&cumulative));
+                html.push_str(&format!("<a href=\"{}\">{}</a>", esc(&href), esc(part)));
+            }
+        }
+    }
+    html.push_str("</nav>\n");
+    html
+}
+
+fn build_explore_content(
+    dir: Option<&str>,
+    filter: Option<&str>,
+    subdirs: &[String],
+    paths: &[String],
+) -> String {
+    let mut out = String::new();
+
+    if subdirs.is_empty() && paths.is_empty() {
+        let msg = if dir.is_none() && filter.is_none() {
+            "Enter a directory path or glob filter above to start exploring."
+        } else {
+            "No images found."
+        };
+        out.push_str(&format!("  <div class=\"empty\">{}</div>\n", msg));
+        return out;
     }
 
-    format!(
-        r##"<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{title} | idup</title>
-  <style>
-    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{
+    let show_headers = !subdirs.is_empty() && !paths.is_empty();
+
+    if !subdirs.is_empty() {
+        out.push_str("  <div class=\"section\">\n");
+        if show_headers {
+            out.push_str(&format!(
+                "    <p class=\"section-title\">Folders <span class=\"count\">({})</span></p>\n",
+                subdirs.len()
+            ));
+        }
+        out.push_str("    <div class=\"grid\">\n");
+        for d in subdirs {
+            let name = Path::new(d)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| d.clone());
+            let href = esc(&format!("/explore?dir={}", url_encode(d)));
+            out.push_str(&format!(
+                "      <a href=\"{href}\" class=\"dir-card\"><div class=\"dir-body\"><span class=\"dir-symbol\">dir</span></div><p class=\"name\" title=\"{full}\">{name}</p></a>\n",
+                href = href,
+                full = esc(d),
+                name = esc(&name),
+            ));
+        }
+        out.push_str("    </div>\n  </div>\n");
+    }
+
+    if !paths.is_empty() {
+        out.push_str("  <div class=\"section\">\n");
+        if show_headers {
+            out.push_str(&format!(
+                "    <p class=\"section-title\">Images <span class=\"count\">({})</span></p>\n",
+                paths.len()
+            ));
+        }
+        out.push_str("    <div class=\"grid\">\n");
+        for p in paths {
+            let filename = Path::new(p)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| p.clone());
+            let parent_dir = Path::new(p)
+                .parent()
+                .map(|d| d.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let img_src = format!("/api/image?path={}", url_encode(p));
+            out.push_str(&format!(
+                "      <div class=\"card\" data-path=\"{dp}\" data-dir=\"{dd}\" data-img-src=\"{ds}\"><div class=\"card-img\"><img src=\"{src}\" loading=\"lazy\" alt=\"{alt}\" /></div><p class=\"name\" title=\"{pt}\">{fn_}</p></div>\n",
+                dp  = esc(p),
+                dd  = esc(&parent_dir),
+                ds  = esc(&img_src),
+                src = esc(&img_src),
+                alt = esc(&filename),
+                pt  = esc(p),
+                fn_ = esc(&filename),
+            ));
+        }
+        out.push_str("    </div>\n  </div>\n");
+    }
+
+    out
+}
+
+const EXPLORE_CSS: &str = r#"
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
       font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, monospace;
       background: #0f1117;
       color: #e2e8f0;
       min-height: 100vh;
-    }}
-    header {{
+    }
+    header {
       background: #1a1d27;
       border-bottom: 1px solid #2d3148;
-      padding: 1rem 1.5rem;
+      padding: 0.75rem 1.5rem;
       display: flex;
-      align-items: baseline;
+      align-items: center;
       gap: 1rem;
-    }}
-    header .logo {{
+      flex-wrap: wrap;
+    }
+    .logo {
       font-size: 1.1rem;
       font-weight: 700;
       color: #7c6af7;
       letter-spacing: 0.05em;
-    }}
-    header h1 {{
-      font-size: 0.9rem;
-      font-weight: 500;
-      color: #94a3b8;
-    }}
-    header h1 span {{ color: #a78bfa; }}
-    .grid {{
+      white-space: nowrap;
+    }
+    .filter-bar {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex: 1;
+      flex-wrap: wrap;
+    }
+    .filter-bar input {
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 4px;
+      color: #e2e8f0;
+      font-family: inherit;
+      font-size: 0.82rem;
+      padding: 0.3rem 0.6rem;
+    }
+    .filter-bar input:focus { outline: none; border-color: #7c6af7; }
+    .filter-bar input[name="dir"] { flex: 2; min-width: 160px; }
+    .filter-bar input[name="filter"] { flex: 1; min-width: 120px; }
+    .filter-bar button {
+      background: #7c6af7;
+      border: none;
+      border-radius: 4px;
+      color: #fff;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.82rem;
+      padding: 0.3rem 0.8rem;
+      white-space: nowrap;
+    }
+    .filter-bar button:hover { background: #6b5ee0; }
+    .breadcrumb {
+      background: #1a1d27;
+      border-bottom: 1px solid #2d3148;
+      padding: 0.5rem 1.5rem;
+      font-size: 0.8rem;
+      color: #64748b;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.15rem;
+    }
+    .breadcrumb a { color: #a78bfa; text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+    .breadcrumb .sep { color: #2d3148; padding: 0 0.1rem; }
+    .breadcrumb .current { color: #e2e8f0; }
+    .section { padding: 1.5rem; }
+    .section + .section { padding-top: 0; }
+    .section-title {
+      font-size: 0.78rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.75rem;
+    }
+    .section-title .count { color: #475569; font-weight: normal; }
+    .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 1rem;
-      padding: 1.5rem;
-    }}
-    .card {{
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 0.75rem;
+    }
+    .card {
       background: #1a1d27;
       border: 1px solid #2d3148;
       border-radius: 8px;
@@ -486,23 +695,23 @@ fn build_gallery_page(paths: &[String]) -> String {
       flex-direction: column;
       cursor: pointer;
       transition: border-color 0.15s;
-    }}
-    .card:hover {{ border-color: #7c6af7; }}
-    .card-img {{
+    }
+    .card:hover { border-color: #7c6af7; }
+    .card-img {
       display: block;
       aspect-ratio: 1;
       overflow: hidden;
       background: #0f1117;
-    }}
-    .card img {{
+    }
+    .card img {
       width: 100%;
       height: 100%;
       object-fit: contain;
       display: block;
       transition: opacity 0.2s;
-    }}
-    .card:hover img {{ opacity: 0.85; }}
-    .card .name {{
+    }
+    .card:hover img { opacity: 0.85; }
+    .card .name, .dir-card .name {
       padding: 0.4rem 0.6rem;
       font-size: 0.72rem;
       color: #94a3b8;
@@ -510,14 +719,41 @@ fn build_gallery_page(paths: &[String]) -> String {
       overflow: hidden;
       text-overflow: ellipsis;
       border-top: 1px solid #2d3148;
-    }}
-    .empty {{
-      padding: 3rem;
+    }
+    .dir-card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      text-decoration: none;
+      color: inherit;
+    }
+    .dir-card:hover { border-color: #7c6af7; }
+    .dir-body {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem 0.75rem;
+      background: #151821;
+    }
+    .dir-symbol {
+      font-size: 0.7rem;
+      color: #475569;
+      border: 1px solid #2d3148;
+      border-radius: 3px;
+      padding: 0.15rem 0.4rem;
+    }
+    .empty {
+      padding: 3rem 1.5rem;
       color: #64748b;
       font-size: 0.875rem;
-    }}
-    /* ── Modal ── */
-    .modal-overlay {{
+    }
+    .modal-overlay {
       display: none;
       position: fixed;
       inset: 0;
@@ -525,9 +761,9 @@ fn build_gallery_page(paths: &[String]) -> String {
       z-index: 100;
       align-items: center;
       justify-content: center;
-    }}
-    .modal-overlay.open {{ display: flex; }}
-    .modal-box {{
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
       background: #1a1d27;
       border: 1px solid #2d3148;
       border-radius: 10px;
@@ -537,28 +773,25 @@ fn build_gallery_page(paths: &[String]) -> String {
       display: flex;
       flex-direction: column;
       overflow: hidden;
-    }}
-    .modal-header {{
+    }
+    .modal-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0.75rem 1rem;
       border-bottom: 1px solid #2d3148;
       gap: 0.75rem;
-    }}
-    .modal-title {{
+    }
+    .modal-title {
       font-size: 0.8rem;
       color: #94a3b8;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       text-decoration: none;
-    }}
-    .modal-title:hover {{
-      color: #a78bfa;
-      text-decoration: underline;
-    }}
-    .modal-close {{
+    }
+    .modal-title:hover { color: #a78bfa; text-decoration: underline; }
+    .modal-close {
       background: none;
       border: none;
       color: #64748b;
@@ -568,9 +801,9 @@ fn build_gallery_page(paths: &[String]) -> String {
       padding: 0.2rem 0.4rem;
       border-radius: 4px;
       flex-shrink: 0;
-    }}
-    .modal-close:hover {{ color: #e2e8f0; background: #2d3148; }}
-    .modal-img-area {{
+    }
+    .modal-close:hover { color: #e2e8f0; background: #2d3148; }
+    .modal-img-area {
       flex: 1;
       overflow: hidden;
       display: flex;
@@ -578,22 +811,22 @@ fn build_gallery_page(paths: &[String]) -> String {
       justify-content: center;
       background: #0f1117;
       min-height: 0;
-    }}
-    .modal-img-area img {{
+    }
+    .modal-img-area img {
       max-width: 100%;
       max-height: 100%;
       object-fit: contain;
       display: block;
-    }}
-    .modal-footer {{
+    }
+    .modal-footer {
       padding: 0.75rem 1rem;
       border-top: 1px solid #2d3148;
       display: flex;
       flex-wrap: wrap;
       gap: 0.5rem;
       align-items: center;
-    }}
-    .modal-btn {{
+    }
+    .modal-btn {
       font-family: inherit;
       font-size: 0.78rem;
       padding: 0.35rem 0.75rem;
@@ -605,29 +838,16 @@ fn build_gallery_page(paths: &[String]) -> String {
       text-decoration: none;
       white-space: nowrap;
       transition: background 0.15s, color 0.15s;
-    }}
-    .modal-btn:hover {{ background: #7c6af7; color: #fff; }}
-    .modal-btn.secondary {{
-      border-color: #2d3148;
-      color: #64748b;
-    }}
-    .modal-btn.secondary:hover {{ background: #2d3148; color: #e2e8f0; }}
-  </style>
-</head>
-<body>
-  <header>
-    <div class="logo">idup</div>
-    <h1><span>{title}</span></h1>
-  </header>
-  <div class="grid">
-    {cards}
-  </div>
+    }
+    .modal-btn:hover { background: #7c6af7; color: #fff; }
+    .modal-btn.secondary { border-color: #2d3148; color: #64748b; }
+    .modal-btn.secondary:hover { background: #2d3148; color: #e2e8f0; }
+"#;
 
-  <!-- Modal overlay -->
-  <div class="modal-overlay" id="modal" role="dialog" aria-modal="true">
+const EXPLORE_MODAL_HTML: &str = r##"  <div class="modal-overlay" id="modal" role="dialog" aria-modal="true">
     <div class="modal-box">
       <div class="modal-header">
-        <a class="modal-title" id="modal-title" href="#" target="_blank" title="Browse siblings"></a>
+        <a class="modal-title" id="modal-title" href="#" target="_blank" title="Browse directory"></a>
         <button class="modal-close" id="modal-close" aria-label="Close">&#x2715;</button>
       </div>
       <div class="modal-img-area">
@@ -638,14 +858,15 @@ fn build_gallery_page(paths: &[String]) -> String {
       </div>
     </div>
   </div>
+"##;
 
-  <script>
+const EXPLORE_SCRIPT: &str = r#"  <script>
     const modal      = document.getElementById('modal');
     const modalImg   = document.getElementById('modal-img');
     const modalTitle = document.getElementById('modal-title');
     const modalOpen  = document.getElementById('modal-open');
 
-    function openModal(card) {{
+    function openModal(card) {
       const path   = card.dataset.path;
       const dir    = card.dataset.dir;
       const imgSrc = card.dataset.imgSrc;
@@ -653,42 +874,37 @@ fn build_gallery_page(paths: &[String]) -> String {
       modalImg.src           = imgSrc;
       modalImg.alt           = path;
       modalTitle.textContent = path;
-      modalTitle.href        = '/gallery?dir=' + encodeURIComponent(dir);
+      modalTitle.href        = '/explore?dir=' + encodeURIComponent(dir);
       modalOpen.href         = imgSrc;
       modal.classList.add('open');
-      history.pushState({{ modal: true }}, '');
-    }}
+      history.pushState({ modal: true }, '');
+    }
 
-    function closeModal(fromPopstate) {{
+    function closeModal(fromPopstate) {
       modal.classList.remove('open');
       modalImg.src = '';
       if (!fromPopstate) history.back();
-    }}
+    }
 
-    window.addEventListener('popstate', () => {{
+    window.addEventListener('popstate', () => {
       if (modal.classList.contains('open')) closeModal(true);
-    }});
+    });
 
-    document.querySelectorAll('.card').forEach(card => {{
+    document.querySelectorAll('.card').forEach(card => {
       card.addEventListener('click', () => openModal(card));
-    }});
+    });
 
     document.getElementById('modal-close').addEventListener('click', () => closeModal(false));
 
-    modal.addEventListener('click', e => {{
+    modal.addEventListener('click', e => {
       if (e.target === modal) closeModal(false);
-    }});
+    });
 
-    document.addEventListener('keydown', e => {{
+    document.addEventListener('keydown', e => {
       if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(false);
-    }});
+    });
   </script>
-</body>
-</html>"##,
-        title = esc(&title),
-        cards = cards,
-    )
-}
+"#;
 
 fn simple_error_page(msg: &str) -> String {
     format!(
@@ -718,39 +934,6 @@ fn err_html(msg: &str) -> String {
     format!(r#"<div class="result-error">{}</div>"#, esc(msg))
 }
 
-/// Decode a percent-encoded URL query-parameter value.
-fn percent_decode(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = String::with_capacity(s.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let (Some(hi), Some(lo)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
-                out.push((hi << 4 | lo) as char);
-                i += 3;
-                continue;
-            }
-        }
-        // `+` is sometimes used to encode a space in query strings.
-        if bytes[i] == b'+' {
-            out.push(' ');
-        } else {
-            out.push(bytes[i] as char);
-        }
-        i += 1;
-    }
-    out
-}
-
-fn hex_val(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b - b'0'),
-        b'a'..=b'f' => Some(b - b'a' + 10),
-        b'A'..=b'F' => Some(b - b'A' + 10),
-        _ => None,
-    }
-}
-
 /// Percent-encode characters that are not safe as a URL query-parameter value.
 fn url_encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 8);
@@ -770,17 +953,16 @@ fn url_encode(s: &str) -> String {
     out
 }
 
-/// Build a /gallery URL for a group hash.
-fn gallery_href_for_hash(hash: &str) -> String {
-    format!("/gallery?hash={}", url_encode(hash))
+/// Build an /explore URL for a duplicate group hash.
+fn explore_href_for_hash(hash: &str) -> String {
+    format!("/explore?hash={}", url_encode(hash))
 }
 
-/// Build a /gallery URL from a slice of absolute paths (repeated `path` params).
-fn gallery_href_for_paths(paths: &[String]) -> String {
-    let qs: String = paths
-        .iter()
-        .map(|p| format!("path={}", url_encode(p)))
-        .collect::<Vec<_>>()
-        .join("&");
-    format!("/gallery?{qs}")
+/// Build an /explore URL for a seeded random result.
+fn explore_href_seeded(seed: u64, n: u32, filter: Option<&str>) -> String {
+    let mut href = format!("/explore?seed={}&n={}", seed, n);
+    if let Some(f) = filter {
+        href.push_str(&format!("&filter={}", url_encode(f)));
+    }
+    href
 }

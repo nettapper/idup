@@ -16,6 +16,7 @@
   <a href="#" data-panel="list">list</a>
   <a href="#" data-panel="info">info</a>
   <a href="#" data-panel="random">random</a>
+  <a href="#" data-panel="explore">explore</a>
 </nav>
 
 <main>
@@ -114,6 +115,23 @@
     </form>
     <span id="info-spinner" class="htmx-indicator">hashing…</span>
     <div id="info-result" class="result-box"></div>
+  </section>
+
+  <!-- Explore -->
+  <section id="panel-explore" class="panel">
+    <h2>Explore</h2>
+    <p class="muted" style="margin-bottom:1rem">Browse images in the database by directory or glob filter. Opens in a new tab.</p>
+    <form method="get" action="/explore" target="_blank">
+      <label>
+        Directory <span class="muted" style="font-size:0.8em">(optional — start path)</span>
+        <input type="text" name="dir" placeholder="/home/user/Photos" />
+      </label>
+      <label>
+        Filter <span class="muted" style="font-size:0.8em">(glob, optional — e.g. <code>*.jpg</code>, <code>/home/user/*</code>)</span>
+        <input type="text" name="filter" placeholder="*.jpg" />
+      </label>
+      <button type="submit" style="margin-top:0.75rem">Open Explorer</button>
+    </form>
   </section>
 
   <!-- Random -->
