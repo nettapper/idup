@@ -258,61 +258,6 @@ pub async fn info(Query(params): Query<InfoQuery>) -> Html<String> {
     Html(html)
 }
 
-// ── Compare ───────────────────────────────────────────────────────────────────
-
-#[derive(Deserialize)]
-pub struct CompareForm {
-    img1: String,
-    img2: String,
-}
-
-pub async fn compare(Form(form): Form<CompareForm>) -> Html<String> {
-    let path1 = PathBuf::from(&form.img1);
-    let path2 = PathBuf::from(&form.img2);
-
-    let h1 = match crate::hash::phash::hash_path(&path1) {
-        Ok(h) => h,
-        Err(e) => {
-            return Html(err_html(&format!("img1: {e}")));
-        }
-    };
-    let h2 = match crate::hash::phash::hash_path(&path2) {
-        Ok(h) => h,
-        Err(e) => {
-            return Html(err_html(&format!("img2: {e}")));
-        }
-    };
-
-    let ph1 = h1.hash.clone();
-    let ph2 = h2.hash.clone();
-
-    let dist_html = match crate::hash::hamming_dist(h1, h2) {
-        Ok(dist) => {
-            let label = match dist {
-                0 => "Identical",
-                1..=5 => "Very similar",
-                6..=10 => "Similar",
-                _ => "Different",
-            };
-            format!(
-                "<p><strong>Hamming distance:</strong> <code>{dist}</code> — {label}</p>"
-            )
-        }
-        Err(e) => format!(
-            r#"<p class="result-error">Distance error: {}</p>"#,
-            esc(&e.to_string())
-        ),
-    };
-
-    Html(format!(
-        r#"<div class="compare-result">
-  <p><strong>img1 pHash:</strong> <code>{ph1}</code></p>
-  <p><strong>img2 pHash:</strong> <code>{ph2}</code></p>
-  {dist_html}
-</div>"#
-    ))
-}
-
 // ── Random ────────────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]

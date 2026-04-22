@@ -15,7 +15,6 @@
   <a href="#" data-panel="update">update</a>
   <a href="#" data-panel="list">list</a>
   <a href="#" data-panel="info">info</a>
-  <a href="#" data-panel="compare">compare</a>
   <a href="#" data-panel="random">random</a>
 </nav>
 
@@ -134,25 +133,6 @@
     </form>
     <span id="random-spinner" class="htmx-indicator">querying…</span>
     <div id="random-result" class="result-box"></div>
-  </section>
-
-  <!-- Compare -->
-  <section id="panel-compare" class="panel">
-    <h2>Compare</h2>
-    <p class="muted" style="margin-bottom:1rem">Compare pHashes of two images and compute Hamming distance.</p>
-    <form hx-post="/api/compare" hx-target="#compare-result" hx-swap="innerHTML" hx-indicator="#compare-spinner">
-      <label>
-        Image 1
-        <input type="text" name="img1" placeholder="/home/user/Photos/a.jpg" required />
-      </label>
-      <label>
-        Image 2
-        <input type="text" name="img2" placeholder="/home/user/Photos/b.jpg" required />
-      </label>
-      <button type="submit">Compare</button>
-    </form>
-    <span id="compare-spinner" class="htmx-indicator">comparing…</span>
-    <div id="compare-result" class="result-box"></div>
   </section>
 
 </main>
