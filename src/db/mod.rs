@@ -427,6 +427,16 @@ async fn save_partial_phash(
 }
 
 fn setup_dir() -> PathBuf {
+    if let Ok(override_path) = std::env::var("IDUP_DB_PATH") {
+        let db_path = PathBuf::from(&override_path);
+        let parent = db_path
+            .parent()
+            .expect("Can't determine parent dir for IDUP_DB_PATH");
+        create_dir_all(parent).expect("Can't create db parent directory for IDUP_DB_PATH");
+        println!("[idup] IDUP_DB_PATH is set — using db at: {}", override_path);
+        return db_path;
+    }
+
     let proj_dirs = ProjectDirs::from("", "", IDUP_DIR_NAME)
         .expect("Could not determine user data directory");
 

@@ -180,8 +180,57 @@ The `idup web` command starts a local HTTP server. The UI has panels for each CL
 ```sh
 cargo build            # Debug build
 cargo build --release  # Optimized build (recommended for perf)
-cargo test             # Run unit tests (SHA-256 known-vector tests)
+cargo test --bins      # Run unit tests (SHA-256 known-vector tests, db tests)
+cargo test --test '*'  # Run integration tests
 cargo run -- <cmd>     # Run directly via Cargo
 ```
 
+A `Makefile` is provided as a convenience wrapper:
+
+```sh
+make build             # cargo build
+make release           # cargo build --release
+make test              # unit tests only (cargo test --bins)
+make integration-test  # integration tests only (cargo test --test '*')
+make all               # unit + integration
+make lint              # cargo clippy -- -D warnings
+make clean             # cargo clean
+```
+
 Performance reference: ~1,400 images processed in ~82 seconds (unoptimized build).
+
+---
+
+## Integration Tests
+
+Integration tests live in `tests/` and invoke the compiled `idup` binary as a
+subprocess via [`assert_cmd`](https://crates.io/crates/assert_cmd). Each test
+gets a fully isolated, auto-cleaned environment.
+
+### DB isolation — `IDUP_DB_PATH`
+
+Setting the `IDUP_DB_PATH` environment variable overrides the default database
+location (`$XDG_DATA_HOME/idup/idup.db3`). When set, idup prints a notice at
+startup:
+
+```
+[idup] IDUP_DB_PATH is set — using db at: /path/to/custom.db3
+```
+
+Integration tests always set this variable to a path inside a `TempDir` so
+they never touch the user's real database.
+
+### Test helpers (`tests/common/`)
+
+| File | Purpose |
+|---|---|
+| `tests/common/mod.rs` | Re-exports `image_gen` and `test_env` modules |
+| `tests/common/image_gen.rs` | `write_png(dir, filename, seed)` — deterministic PNG generation via a tiny inline LCG; same seed always produces identical pixel data and therefore an identical SHA-256 hash |
+| `tests/common/test_env.rs` | `TestEnv::new()` — creates `<tmp>/db/idup.db3` + `<tmp>/imgs/`; `TestEnv::cmd()` returns an `assert_cmd::Command` pre-wired with `IDUP_DB_PATH` |
+
+### Adding a new integration test
+
+1. Create `tests/<name>_test.rs`.
+2. Declare `mod common;` at the top.
+3. Use `TestEnv::new()`, `image_gen::write_png(...)`, and `env.cmd()` to set
+   up and exercise the binary.
