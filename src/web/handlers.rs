@@ -78,6 +78,58 @@ pub async fn scan(
     ))
 }
 
+// ── Update ────────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct UpdateForm {
+    path: Option<String>,
+    /// Present as "true" when the checkbox is checked; absent otherwise.
+    cleanup: Option<String>,
+}
+
+pub async fn update(
+    State(pool): State<SqlitePool>,
+    Form(form): Form<UpdateForm>,
+) -> Html<String> {
+    let path = form.path.filter(|p| !p.trim().is_empty()).map(PathBuf::from);
+    let cleanup = form.cleanup.is_some();
+
+    let stats = crate::update::process_update(path, cleanup, &pool).await;
+
+    // Build result HTML with formatted statistics
+    let cleaned_row = if cleanup {
+        format!(
+            r#"<tr><td style="text-align:right;padding-right:1rem">Cleaned:</td><td><code>{}</code></td></tr>"#,
+            stats.cleaned
+        )
+    } else {
+        String::new()
+    };
+
+    Html(format!(
+        r#"<div class="result-success">
+            Update complete
+            <table style="margin-top:1rem;font-size:0.95rem;line-height:1.8">
+                <tr>
+                    <td style="text-align:right;padding-right:1rem">Verified:</td>
+                    <td><code>{}</code></td>
+                </tr>
+                <tr>
+                    <td style="text-align:right;padding-right:1rem">Updated:</td>
+                    <td><code>{}</code></td>
+                </tr>
+                <tr>
+                    <td style="text-align:right;padding-right:1rem">Missing:</td>
+                    <td><code>{}</code></td>
+                </tr>
+                {cleaned_row}
+            </table>
+            <p class="muted" style="font-size:0.85rem;margin-top:1rem">{} files checked in {:.2}s</p>
+        </div>"#,
+        stats.verified, stats.updated, stats.missing, stats.total, stats.elapsed_secs
+    ))
+}
+
 // ── List ──────────────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]

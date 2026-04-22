@@ -218,6 +218,7 @@ async fn main() -> sqlx::Result<()> {
 
         Command::Update { path, cleanup } => {
             update::process_update(path, cleanup, &pool).await;
+            // Stats are printed inside process_update()
         }
     }
 

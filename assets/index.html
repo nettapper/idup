@@ -12,6 +12,7 @@
 <nav>
   <div class="logo">idup</div>
   <a href="#" class="active" data-panel="scan">scan</a>
+  <a href="#" data-panel="update">update</a>
   <a href="#" data-panel="list">list</a>
   <a href="#" data-panel="info">info</a>
   <a href="#" data-panel="compare">compare</a>
@@ -65,6 +66,25 @@
     </form>
     <span id="scan-spinner" class="htmx-indicator">scanning…</span>
     <div id="scan-result" class="result-box"></div>
+  </section>
+
+  <!-- Update -->
+  <section id="panel-update" class="panel">
+    <h2>Update</h2>
+    <p class="muted">Validate and refresh image hashes in the database.</p>
+    <form hx-post="/api/update" hx-target="#update-result" hx-swap="innerHTML" hx-indicator="#update-spinner">
+      <label>
+        Path (optional)
+        <input type="text" name="path" placeholder="/home/user/Photos" />
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" name="cleanup" value="true" />
+        Cleanup — delete missing files from database
+      </label>
+      <button type="submit" style="margin-top:0.75rem">Update</button>
+    </form>
+    <span id="update-spinner" class="htmx-indicator">updating…</span>
+    <div id="update-result" class="result-box"></div>
   </section>
 
   <!-- List -->

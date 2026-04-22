@@ -6,7 +6,17 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::time::{interval, Duration};
 
-pub async fn process_update(path: Option<PathBuf>, cleanup: bool, pool: &SqlitePool) {
+#[derive(Debug, Clone)]
+pub struct UpdateStats {
+    pub verified: usize,
+    pub updated: usize,
+    pub missing: usize,
+    pub cleaned: usize,
+    pub total: usize,
+    pub elapsed_secs: f64,
+}
+
+pub async fn process_update(path: Option<PathBuf>, cleanup: bool, pool: &SqlitePool) -> UpdateStats {
     let filter_path = path.as_ref().map(|p| {
         p.canonicalize()
             .unwrap_or_else(|_| p.clone())
@@ -19,13 +29,27 @@ pub async fn process_update(path: Option<PathBuf>, cleanup: bool, pool: &SqliteP
         Ok(imgs) => imgs,
         Err(err) => {
             eprintln!("Error fetching images from database: {}", err);
-            return;
+            return UpdateStats {
+                verified: 0,
+                updated: 0,
+                missing: 0,
+                cleaned: 0,
+                total: 0,
+                elapsed_secs: 0.0,
+            };
         }
     };
 
     if images.is_empty() {
         println!("No images found in database.");
-        return;
+        return UpdateStats {
+            verified: 0,
+            updated: 0,
+            missing: 0,
+            cleaned: 0,
+            total: 0,
+            elapsed_secs: 0.0,
+        };
     }
 
     let start = Instant::now();
@@ -122,19 +146,28 @@ pub async fn process_update(path: Option<PathBuf>, cleanup: bool, pool: &SqliteP
     progress_task.abort();
     let elapsed = start.elapsed();
     let total = counter.load(Ordering::Relaxed);
+    let elapsed_secs = elapsed.as_secs_f64();
 
-    println!();
-    println!(
-        "Done. {} files checked in {:.2}s.",
+    let stats = UpdateStats {
+        verified: verified_count,
+        updated: updated_count,
+        missing: missing_count,
+        cleaned: cleaned_count,
         total,
-        elapsed.as_secs_f64()
-    );
+        elapsed_secs,
+    };
+
+    // Print stats to stdout
+    println!();
+    println!("Done. {} files checked in {:.2}s.", total, elapsed_secs);
     println!("  Verified: {}", verified_count);
     println!("  Updated:  {}", updated_count);
     println!("  Missing:  {}", missing_count);
     if cleanup {
         println!("  Cleaned:  {}", cleaned_count);
     }
+
+    stats
 }
 
 /// Recompute all hash kinds that exist in the DB for the given image.
