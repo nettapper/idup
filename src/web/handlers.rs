@@ -58,7 +58,7 @@ pub async fn scan(
         }
     };
 
-    crate::scan::process_path(path, recursive, &opts, &pool).await;
+    let stats = crate::scan::process_path(path, recursive, &opts, &pool).await;
 
     let mut notes: Vec<&str> = Vec::new();
     if recursive { notes.push("recursive"); }
@@ -72,9 +72,14 @@ pub async fn scan(
     };
 
     Html(format!(
-        r#"<div class="result-success">Scan complete for <code>{}</code>{}</div>"#,
+        r#"<div class="result-success">
+            Scan complete for <code>{}</code>{}
+            <p class="muted" style="font-size:0.85rem;margin-top:1rem">{} files processed in {:.2}s</p>
+        </div>"#,
         esc(&form.path),
         suffix,
+        stats.processed,
+        stats.elapsed_secs,
     ))
 }
 

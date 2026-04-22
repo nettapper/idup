@@ -66,6 +66,10 @@ Defines `Cli` and `Command` via clap derive macros. Opens the SQLite connection 
 3. Computes 1 perceptual hash (pHash).
 4. Saves all hashes to the DB.
 
+Returns `ScanStats` with:
+- `processed`: number of images scanned
+- `elapsed_secs`: total execution time
+
 ### `src/update/mod.rs`
 `process_update(path, cleanup, pool)` — validates and refreshes image hashes in the DB. For each image in the DB (optionally filtered by path):
 1. Checks if the file still exists on disk. If missing and `--cleanup` flag is set, deletes the image from the DB.

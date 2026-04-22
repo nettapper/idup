@@ -147,6 +147,7 @@ async fn main() -> sqlx::Result<()> {
                 scan::ScanOptions::default()
             };
             scan::process_path(path, recursive, &opts, &pool).await;
+            // Stats are printed inside process_path()
         }
 
         Command::List { path } => {

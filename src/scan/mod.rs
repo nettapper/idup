@@ -8,6 +8,12 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::time::{interval, Duration};
 
+#[derive(Debug, Clone)]
+pub struct ScanStats {
+    pub processed: usize,
+    pub elapsed_secs: f64,
+}
+
 /// Controls which hash variants are computed during a scan.
 ///
 /// The base SHA-256 of raw pixel data (`imgdata`) is always included.
@@ -52,13 +58,16 @@ impl ScanOptions {
     }
 }
 
-pub async fn process_path(path: PathBuf, recursive: bool, opts: &ScanOptions, pool: &SqlitePool) {
+pub async fn process_path(path: PathBuf, recursive: bool, opts: &ScanOptions, pool: &SqlitePool) -> ScanStats {
     let mut stack: Vec<PathBuf> = Vec::new();
     match path.canonicalize() {
         Ok(path) => stack.push(path),
         Err(err) => {
             println!("Cannot process path due to err={}", err);
-            return;
+            return ScanStats {
+                processed: 0,
+                elapsed_secs: 0.0,
+            };
         }
     }
 
@@ -136,11 +145,20 @@ pub async fn process_path(path: PathBuf, recursive: bool, opts: &ScanOptions, po
     progress_task.abort();
     let elapsed = start.elapsed();
     let total = counter.load(Ordering::Relaxed);
+    let elapsed_secs = elapsed.as_secs_f64();
+
+    let stats = ScanStats {
+        processed: total,
+        elapsed_secs,
+    };
+
     println!(
         "Done. {} files scanned in {:.2}s.",
         total,
-        elapsed.as_secs_f64()
+        elapsed_secs
     );
+
+    stats
 }
 
 fn is_img(path: &Path) -> Option<bool> {
