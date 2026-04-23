@@ -73,6 +73,9 @@ enum Command {
         path: Option<PathBuf>,
     },
 
+    /// Print database statistics
+    Stats,
+
     /// Clean outdated data in the db
     Clean,
 
@@ -194,6 +197,16 @@ async fn main() -> sqlx::Result<()> {
                         println!("{}", item.path);
                     }
                 }
+            }
+        }
+
+        Command::Stats => {
+            let stats = db::db_stats(&pool).await?;
+            println!("Images:  {}", stats.image_count);
+            println!("Hashes:");
+            let max_len = stats.hash_counts.iter().map(|r| r.kind.len()).max().unwrap_or(0);
+            for row in &stats.hash_counts {
+                println!("  {:<width$} {}", row.kind, row.count, width = max_len);
             }
         }
 

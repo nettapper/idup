@@ -109,6 +109,7 @@ Key public functions:
 | `subdirs_in_dir(pool, dir)` | Returns full paths of immediate subdirectories of `dir` that contain images |
 | `images_matching_filter_in_dir(pool, dir, filter)` | Returns images matching a glob filter, optionally scoped to `dir` |
 | `save(pool, img)` | Upserts an image and its hash |
+| `db_stats(pool)` | Returns image count and hash counts grouped by kind |
 | `clear_hashes_for_path(pool, path)` | Deletes all hashes for a given path |
 
 DB location: `$XDG_DATA_HOME/idup/idup.db3` (defaults to `~/.local/share/idup/idup.db3`). Created automatically on first run. Includes an in-band schema migration to fix the `hashes` primary key (recreates as `hashes_v2` if old schema detected).
@@ -141,6 +142,7 @@ idup random [N]                  # Return N random files from the db (default: 2
 idup info <file>                 # Print phash + sha256 of a single file
 idup compare <img1> <img2>       # Print phash of both images and their Hamming distance
 idup web [--port N] [--open]     # Start the web UI (default port: 3000)
+idup stats                        # Print database statistics (image count, hash counts by type)
 idup clean                       # (stub) Remove outdated DB entries
 idup update [PATH] [--cleanup]   # Validate and refresh image hashes in the DB
 ```

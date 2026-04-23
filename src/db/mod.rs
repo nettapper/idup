@@ -363,6 +363,34 @@ pub async fn get_single_hash(pool: &SqlitePool, path: &str, kind: &str) -> Resul
     Ok(result.map(|r| r.hash))
 }
 
+#[derive(Debug, FromRow)]
+pub struct HashCountRow {
+    pub kind: String,
+    pub count: i64,
+}
+
+pub struct DbStats {
+    pub image_count: i64,
+    pub hash_counts: Vec<HashCountRow>,
+}
+
+pub async fn db_stats(pool: &SqlitePool) -> Result<DbStats, sqlx::Error> {
+    let image_count: i64 = query_scalar("SELECT COUNT(*) FROM images")
+        .fetch_one(pool)
+        .await?;
+
+    let hash_counts: Vec<HashCountRow> = query_as::<_, HashCountRow>(
+        "SELECT kind, COUNT(*) AS count FROM hashes GROUP BY kind ORDER BY kind",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(DbStats {
+        image_count,
+        hash_counts,
+    })
+}
+
 /// Delete an image and all its associated hashes from the database.
 pub async fn delete_image(pool: &SqlitePool, path: &str) -> Result<(), sqlx::Error> {
     query("DELETE FROM partial_hashes WHERE images_id IN (SELECT images_id FROM images WHERE path = ?)")
