@@ -110,7 +110,7 @@ pub async fn process_path(path: PathBuf, recursive: bool, opts: &ScanOptions, po
                 continue;
             }
 
-            match hash::sha256_crate::selected_hashes_of_img_data(
+            match hash::sha256_impl::selected_hashes_of_img_data(
                 &curr,
                 opts.sha256_rotations,
                 opts.sha256_flips,

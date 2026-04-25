@@ -6,6 +6,13 @@ pub mod phash;
 pub mod sha256;
 pub mod sha256_crate;
 
+// Select which SHA-256 implementation to use based on feature flags
+#[cfg(feature = "sha2-crate")]
+pub use sha256_crate as sha256_impl;
+
+#[cfg(feature = "sha256-handrolled")]
+pub use sha256 as sha256_impl;
+
 #[derive(Debug)]
 pub enum ImgHashKind {
     Phash,

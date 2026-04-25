@@ -185,7 +185,11 @@ The `idup web` command starts a local HTTP server. The UI has panels for each CL
 ## Architecture Notes
 
 - **Dual hashing**: Each image gets a perceptual hash (for near-duplicate/fuzzy matching) and pixel-data SHA-256 across 8 orientations (for exact duplicate detection including rotations/flips).
-- **SHA-256 via sha2 crate**: Uses the production-grade `sha2 0.10` crate for cryptographic hashing. The original hand-rolled implementation is preserved in `sha256.rs` for reference.
+- **Selectable SHA-256 implementation**: The project uses Cargo features to select between two SHA-256 implementations at compile time:
+  - **Default (`sha2-crate`)**: Production-grade `sha2 0.10` crate, recommended for normal use
+  - **Alternative (`sha256-handrolled`)**: Hand-rolled implementation for reference and learning purposes
+  - Both implementations are fully tested and produce identical results
+  - Both modules are always available in the codebase for examination
 - **Magic-byte file detection**: `infer` inspects file bytes rather than relying on file extensions. Also used by `/api/image` to set the correct `Content-Type` response header.
 - **Partial hash table**: `partial_hashes` splits pHash into 4-byte chunks with sequence numbers, laying groundwork for indexed fuzzy lookup (not yet surfaced in the CLI).
 - **Stack-based DFS traversal**: Avoids recursion-related stack overflows on deep directory trees.
@@ -198,10 +202,27 @@ The `idup web` command starts a local HTTP server. The UI has panels for each CL
 
 ## Build and Test
 
+### Features
+
+The `idup` crate supports selecting which SHA-256 implementation to use:
+
+| Feature | Description |
+|---|---|
+| `sha2-crate` (default) | Uses the production-grade `sha2 0.10` crate |
+| `sha256-handrolled` | Uses the hand-rolled SHA-256 implementation (for reference/learning) |
+
+**Note**: Only one feature can be active at a time. If neither is specified, `sha2-crate` is used by default.
+
+### Build commands
+
 ```sh
-# Build all workspace members
+# Build all workspace members (uses default sha2-crate feature)
 cargo build            # Debug build
 cargo build --release  # Optimized build (recommended for perf)
+
+# Build with specific SHA-256 implementation
+cargo build --no-default-features --features sha2-crate
+cargo build --no-default-features --features sha256-handrolled
 
 # Build specific binaries
 cargo build --bin idup
@@ -210,6 +231,10 @@ cargo build --bin igen
 # Run tests (from workspace root)
 cargo test --bins      # Run unit tests (SHA-256 known-vector tests, db tests)
 cargo test --test '*'  # Run integration tests
+
+# Run tests with specific feature
+cargo test --bins --no-default-features --features sha2-crate
+cargo test --bins --no-default-features --features sha256-handrolled
 
 # Run commands directly
 cargo run --bin idup -- <cmd>      # Run idup CLI
