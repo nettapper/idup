@@ -14,10 +14,11 @@ test:
 
 ## Run integration tests (builds the binary first via assert_cmd)
 integration-test:
-	cargo test --test '*'
+	cargo test -p idup --test '*'
 
 ## Run all tests (unit + integration)
-all: test integration-test
+all:
+	cargo test --workspace
 
 ## Lint with clippy
 lint:
@@ -25,36 +26,15 @@ lint:
 
 ## Run performance benchmark (generates 200 test images, scans with all hash variants)
 ## Outputs timing and throughput (imgs/sec)
-bench: release
-	@set -e; \
-	TMPDIR=$$(mktemp -d); \
-	IMGDIR=$$TMPDIR/imgs; \
-	mkdir -p $$IMGDIR; \
-	echo "Generating test images in $$IMGDIR ..."; \
-	cargo run --release --example igen -- --dir $$IMGDIR --count 200 --dupe-pct 20 > /tmp/igen_out.txt 2>&1; \
-	IMGCOUNT=$$(tail -1 /tmp/igen_out.txt); \
-	echo "Generated $$IMGCOUNT images"; \
-	IDUP_DB_PATH=$$TMPDIR/idup.db3 ./target/release/idup scan --recursive --all $$IMGDIR; \
-	rm -rf $$TMPDIR; \
-	echo "Benchmark complete."
+bench:
+	@./scripts/bench.sh
 
 ## Run performance benchmark with flamegraph profiling
 ## Generates flamegraph.svg showing CPU hotspots
 ## Requires: cargo install flamegraph + system 'perf' tool
 ## On Linux: sudo apt-get install linux-tools-generic (or similar for your distro)
-bench-flamegraph: release
-	@set -e; \
-	TMPDIR=$$(mktemp -d); \
-	IMGDIR=$$TMPDIR/imgs; \
-	mkdir -p $$IMGDIR; \
-	echo "Generating test images in $$IMGDIR ..."; \
-	cargo run --release --example igen -- --dir $$IMGDIR --count 200 --dupe-pct 20 > /tmp/igen_out.txt 2>&1; \
-	IMGCOUNT=$$(tail -1 /tmp/igen_out.txt); \
-	echo "Generated $$IMGCOUNT images"; \
-	echo "Running scan under flamegraph (this may take a moment) ..."; \
-	IDUP_DB_PATH=$$TMPDIR/idup.db3 cargo flamegraph --bin idup -- scan --recursive --all $$IMGDIR || { echo "Error: flamegraph failed. Ensure 'perf' is installed (sudo apt-get install linux-tools-generic) and cargo-flamegraph is installed (cargo install flamegraph)"; exit 1; }; \
-	rm -rf $$TMPDIR; \
-	echo "Flamegraph written to flamegraph.svg"
+bench-flamegraph:
+	@./scripts/bench-flamegraph.sh
 
 ## Remove build artefacts
 clean:
