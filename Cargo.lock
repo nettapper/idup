@@ -1114,6 +1114,7 @@ dependencies = [
  "infer",
  "open",
  "serde",
+ "sha2",
  "sqlx",
  "tempfile",
  "tokio",

@@ -18,6 +18,7 @@ The name is short for **image duplicates**.
 | Database | sqlx 0.8 with SQLite |
 | Image processing | image 0.25 |
 | File type detection | infer 0.19.0 (magic-byte MIME detection) |
+| Cryptographic hash | sha2 0.10 (SHA-256 implementation) |
 | Logging | env_logger 0.11.8 (controlled via `RUST_LOG`) |
 | Web server | axum 0.8 |
 | Web UI | htmx 2.0 (CDN), hand-written HTML/CSS |
@@ -48,8 +49,9 @@ idup/                      # Workspace root
 │   │       │   └── mod.rs # Database layer (SQLite via sqlx)
 │   │       ├── hash/
 │   │       │   ├── mod.rs # Shared hash types (ImgHash, ImgHashKind) and Hamming distance
-│   │       │   ├── phash.rs    # Perceptual hash (average hash) — resize to 8x8, compare to mean
-│   │       │   └── sha256.rs   # Hand-rolled SHA-256 implementation
+│   │       │   ├── phash.rs      # Perceptual hash (average hash) — resize to 8x8, compare to mean
+│   │       │   ├── sha256.rs     # Hand-rolled SHA-256 implementation (kept for reference)
+│   │       │   └── sha256_crate.rs # SHA-256 via sha2 0.10 crate
 │   │       ├── scan/
 │   │       │   └── mod.rs # Filesystem traversal and hashing orchestration
 │   │       ├── update/
@@ -95,7 +97,10 @@ Returns `ScanStats` with:
 `hash(img) -> u64` — resizes to 8×8, converts to grayscale, computes mean pixel value, produces a 64-bit integer where each bit is 1 if the corresponding pixel is above-mean. Low Hamming distance between two pHashes indicates perceptual similarity.
 
 ### `src/hash/sha256.rs`
-Hand-rolled SHA-256 based on the Wikipedia pseudocode. `all_hashes_of_img_data(path)` returns 8 hashes covering all rotation/flip variants of the decoded pixel buffer — used to detect exact pixel-identical images regardless of storage format or orientation.
+Hand-rolled SHA-256 based on the Wikipedia pseudocode. Kept for reference and learning purposes. The crate now uses the `sha2` crate implementation instead (see `sha256_crate.rs`).
+
+### `src/hash/sha256_crate.rs`
+SHA-256 via the `sha2 0.10` crate. `selected_hashes_of_img_data(path)` returns hashes covering all rotation/flip variants of the decoded pixel buffer — used to detect exact pixel-identical images regardless of storage format or orientation.
 
 ### `src/hash/mod.rs`
 Defines `ImgHashKind` (`Phash` or `Sha256(String)` where the string names the transform, e.g. `"imgdata rot90"`), `ImgHash` struct, and `hamming_dist(a, b)`.
@@ -180,7 +185,7 @@ The `idup web` command starts a local HTTP server. The UI has panels for each CL
 ## Architecture Notes
 
 - **Dual hashing**: Each image gets a perceptual hash (for near-duplicate/fuzzy matching) and pixel-data SHA-256 across 8 orientations (for exact duplicate detection including rotations/flips).
-- **Hand-rolled SHA-256**: Written from scratch as a learning exercise with full unit tests against known vectors. Not a production crypto dependency.
+- **SHA-256 via sha2 crate**: Uses the production-grade `sha2 0.10` crate for cryptographic hashing. The original hand-rolled implementation is preserved in `sha256.rs` for reference.
 - **Magic-byte file detection**: `infer` inspects file bytes rather than relying on file extensions. Also used by `/api/image` to set the correct `Content-Type` response header.
 - **Partial hash table**: `partial_hashes` splits pHash into 4-byte chunks with sequence numbers, laying groundwork for indexed fuzzy lookup (not yet surfaced in the CLI).
 - **Stack-based DFS traversal**: Avoids recursion-related stack overflows on deep directory trees.

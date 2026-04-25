@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 pub mod phash;
 pub mod sha256;
+pub mod sha256_crate;
 
 #[derive(Debug)]
 pub enum ImgHashKind {
