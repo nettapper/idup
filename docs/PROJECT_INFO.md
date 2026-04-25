@@ -27,29 +27,41 @@ The name is short for **image duplicates**.
 
 ## Project Structure
 
+Workspace with two crates:
+
 ```
-idup/
-├── Cargo.toml          # Package manifest and direct dependencies
-├── Cargo.lock          # Locked dependency tree
-├── README.md           # Brief description and perf notes
-├── assets/
-│   ├── index.html      # Main web UI (SPA using htmx)
-│   └── style.css       # Shared stylesheet for web UI
+idup/                      # Workspace root
+├── Cargo.toml             # Workspace manifest (defines members and shared metadata)
+├── Cargo.lock             # Locked dependency tree
+├── README.md              # Brief description and perf notes
 ├── docs/
-│   └── PROJECT_INFO.md # This file
-└── src/
-    ├── main.rs         # CLI entry point and command dispatch
-    ├── db/
-    │   └── mod.rs      # Database layer (SQLite via sqlx)
-    ├── hash/
-    │   ├── mod.rs      # Shared hash types (ImgHash, ImgHashKind) and Hamming distance
-    │   ├── phash.rs    # Perceptual hash (average hash) — resize to 8x8, compare to mean
-    │   └── sha256.rs   # Hand-rolled SHA-256 implementation
-    ├── scan/
-    │   └── mod.rs      # Filesystem traversal and hashing orchestration
-    └── web/
-        ├── mod.rs      # Axum router setup and server startup
-        └── handlers.rs # HTTP handlers for all routes
+│   └── PROJECT_INFO.md    # This file
+├── crates/
+│   ├── idup/              # Main CLI binary
+│   │   ├── Cargo.toml     # idup crate manifest
+│   │   ├── assets/
+│   │   │   ├── index.html # Main web UI (SPA using htmx)
+│   │   │   └── style.css  # Shared stylesheet for web UI
+│   │   └── src/
+│   │       ├── main.rs    # CLI entry point and command dispatch
+│   │       ├── db/
+│   │       │   └── mod.rs # Database layer (SQLite via sqlx)
+│   │       ├── hash/
+│   │       │   ├── mod.rs # Shared hash types (ImgHash, ImgHashKind) and Hamming distance
+│   │       │   ├── phash.rs    # Perceptual hash (average hash) — resize to 8x8, compare to mean
+│   │       │   └── sha256.rs   # Hand-rolled SHA-256 implementation
+│   │       ├── scan/
+│   │       │   └── mod.rs # Filesystem traversal and hashing orchestration
+│   │       ├── update/
+│   │       │   └── mod.rs # Image hash validation and refresh
+│   │       └── web/
+│   │           ├── mod.rs # Axum router setup and server startup
+│   │           └── handlers.rs # HTTP handlers for all routes
+│   │
+│   └── igen/              # Performance test image generator
+│       ├── Cargo.toml     # igen crate manifest (minimal deps: just `image`)
+│       └── src/
+│           └── main.rs    # Standalone image generation utility
 ```
 
 ---
@@ -182,11 +194,21 @@ The `idup web` command starts a local HTTP server. The UI has panels for each CL
 ## Build and Test
 
 ```sh
+# Build all workspace members
 cargo build            # Debug build
 cargo build --release  # Optimized build (recommended for perf)
+
+# Build specific binaries
+cargo build --bin idup
+cargo build --bin igen
+
+# Run tests (from workspace root)
 cargo test --bins      # Run unit tests (SHA-256 known-vector tests, db tests)
 cargo test --test '*'  # Run integration tests
-cargo run -- <cmd>     # Run directly via Cargo
+
+# Run commands directly
+cargo run --bin idup -- <cmd>      # Run idup CLI
+cargo run --bin igen -- --dir <path> --count <n> --dupe-pct <pct>
 ```
 
 A `Makefile` is provided as a convenience wrapper:
@@ -231,12 +253,12 @@ make bench-flamegraph
 
 Outputs `flamegraph.svg` in the project root, showing per-function CPU time as a flame chart. Useful for identifying performance bottlenecks (e.g., image decoding vs. hashing vs. database I/O).
 
-### Image Generator Binary: `cargo run --example igen`
+### Image Generator Binary: `igen`
 
-Standalone utility for generating test image datasets:
+Standalone utility (in `crates/igen/`) for generating test image datasets:
 
 ```sh
-cargo run --release --example igen -- \
+cargo run --release --bin igen -- \
   --dir /tmp/test_images \
   --count 200 \
   --dupe-pct 20

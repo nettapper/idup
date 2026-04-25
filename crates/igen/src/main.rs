@@ -77,7 +77,7 @@ fn main() {
     let dir = match dir {
         Some(d) => PathBuf::from(d),
         None => {
-            eprintln!("Usage: cargo run --example igen -- --dir <path> [--count <n>] [--dupe-pct <pct>]");
+            eprintln!("Usage: cargo run --bin igen -- --dir <path> [--count <n>] [--dupe-pct <pct>]");
             eprintln!("\nDefaults: --count 200 --dupe-pct 20");
             std::process::exit(1);
         }

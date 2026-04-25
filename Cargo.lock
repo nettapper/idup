@@ -1121,6 +1121,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "igen"
+version = "0.1.0"
+dependencies = [
+ "image",
+]
+
+[[package]]
 name = "image"
 version = "0.25.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
