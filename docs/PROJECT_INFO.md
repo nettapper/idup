@@ -205,6 +205,55 @@ Performance reference: ~1,400 images processed in ~82 seconds (unoptimized build
 
 ---
 
+## Benchmarking
+
+### `make bench`
+
+Generates a 200-image test dataset with ~20% intentional duplicates, varying in size (64x64, 256x256, 1024x1024), then runs `idup scan --all` (all hash variants) and reports throughput:
+
+```
+Done. 200 files scanned in 5.43s (36.83 imgs/sec).
+```
+
+Uses temporary directories that are auto-cleaned up after the benchmark.
+
+### `make bench-flamegraph`
+
+Profiles the benchmark under CPU flamegraph visualization:
+
+```sh
+# First install flamegraph (one-time):
+cargo install flamegraph
+
+# Then run:
+make bench-flamegraph
+```
+
+Outputs `flamegraph.svg` in the project root, showing per-function CPU time as a flame chart. Useful for identifying performance bottlenecks (e.g., image decoding vs. hashing vs. database I/O).
+
+### Image Generator Binary: `cargo run --example igen`
+
+Standalone utility for generating test image datasets:
+
+```sh
+cargo run --release --example igen -- \
+  --dir /tmp/test_images \
+  --count 200 \
+  --dupe-pct 20
+```
+
+**Arguments:**
+
+| Arg | Default | Purpose |
+|---|---|---|
+| `--dir <path>` | (required) | Output directory for generated images |
+| `--count <n>` | 200 | Total images to generate |
+| `--dupe-pct <n>` | 20 | Percentage of images that are exact duplicates (same seed, different filename) |
+
+Outputs the directory path and total count to stdout (one per line), making it suitable for shell scripting.
+
+---
+
 ## Integration Tests
 
 Integration tests live in `tests/` and invoke the compiled `idup` binary as a

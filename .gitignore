@@ -2,3 +2,7 @@
 
 # used for some test data
 /temp/
+
+# perf
+flamegraph.svg
+perf.data

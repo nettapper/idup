@@ -152,10 +152,17 @@ pub async fn process_path(path: PathBuf, recursive: bool, opts: &ScanOptions, po
         elapsed_secs,
     };
 
+    let imgs_per_sec = if elapsed_secs > 0.0 {
+        total as f64 / elapsed_secs
+    } else {
+        0.0
+    };
+
     println!(
-        "Done. {} files scanned in {:.2}s.",
+        "Done. {} files scanned in {:.2}s ({:.2} imgs/sec).",
         total,
-        elapsed_secs
+        elapsed_secs,
+        imgs_per_sec
     );
 
     stats
