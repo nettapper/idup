@@ -278,9 +278,22 @@ Outputs the directory path and total count to stdout (one per line), making it s
 
 ## Integration Tests
 
-Integration tests live in `tests/` and invoke the compiled `idup` binary as a
+Integration tests live in `crates/idup/tests/` and invoke the compiled `idup` binary as a
 subprocess via [`assert_cmd`](https://crates.io/crates/assert_cmd). Each test
 gets a fully isolated, auto-cleaned environment.
+
+### Running Integration Tests
+
+```sh
+# Run integration tests for the idup crate
+cargo test -p idup
+
+# Run specific test
+cargo test -p idup scan_detects_exact_duplicate
+
+# Run all tests (unit + integration) in the workspace
+cargo test --workspace
+```
 
 ### DB isolation — `IDUP_DB_PATH`
 
@@ -295,7 +308,7 @@ startup:
 Integration tests always set this variable to a path inside a `TempDir` so
 they never touch the user's real database.
 
-### Test helpers (`tests/common/`)
+### Test helpers (`crates/idup/tests/common/`)
 
 | File | Purpose |
 |---|---|
@@ -305,7 +318,7 @@ they never touch the user's real database.
 
 ### Adding a new integration test
 
-1. Create `tests/<name>_test.rs`.
+1. Create `crates/idup/tests/<name>_test.rs`.
 2. Declare `mod common;` at the top.
 3. Use `TestEnv::new()`, `image_gen::write_png(...)`, and `env.cmd()` to set
    up and exercise the binary.
