@@ -3,6 +3,7 @@ name = "idup"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+publish = false
 
 [dependencies]
 image       = "0.25"

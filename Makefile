@@ -1,4 +1,4 @@
-.PHONY: build release test integration-test lint clean all bench bench-flamegraph
+.PHONY: build release test integration-test lint check clean all bench bench-flamegraph
 
 ## Build debug binary
 build:
@@ -23,6 +23,9 @@ all:
 ## Lint with clippy
 lint:
 	cargo clippy -- -D warnings
+
+check:
+	cargo deny check
 
 ## Run performance benchmark (generates 200 test images, scans with all hash variants)
 ## Outputs timing and throughput (imgs/sec)
