@@ -6,23 +6,25 @@ edition.workspace = true
 publish = false
 
 [dependencies]
-image       = "0.25"
-infer       = "0.19.0"
-clap        = { version = "4.6.1", features = ["derive"] }
-sqlx        = { version = "0.8",   features = ["sqlite", "runtime-tokio"] }
-tokio       = { version = "1",     features = ["macros", "rt-multi-thread"] }
-env_logger  = "0.11.8"
-axum        = "0.8"
-tower-http  = { version = "0.6",   features = ["cors"] }
-serde       = { version = "1",     features = ["derive"] }
-open        = "5"
-directories = "6.0.0"
-sha2        = "0.10"
+image        = "0.25"
+infer        = "0.19.0"
+clap         = { version = "4.6.1", features = ["derive"] }
+sqlx         = { version = "0.8",   features = ["sqlite", "runtime-tokio"] }
+tokio        = { version = "1",     features = ["macros", "rt-multi-thread"] }
+env_logger   = "0.11.8"
+axum         = "0.8"
+tower-http   = { version = "0.6",   features = ["cors"] }
+serde        = { version = "1",     features = ["derive"] }
+open         = "5"
+directories  = "6.0.0"
+xxhash-rust  = { version = "0.8", features = ["xxh3"] }
 
 [features]
-default = ["sha2-crate"]
-sha2-crate = []
-sha256-handrolled = []
+# At least one exact-hash algorithm must be active.
+# Both can be enabled simultaneously.
+default = ["xxh3"]
+xxh3    = []   # xxHash3 64-bit (fast, non-cryptographic)
+sha256  = []   # Hand-rolled SHA-256 (cryptographic, kept for reference)
 
 [dev-dependencies]
 tempfile   = "3"

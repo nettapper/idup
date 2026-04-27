@@ -3,20 +3,22 @@ use std::num::ParseIntError;
 use std::path::PathBuf;
 
 pub mod phash;
+
+// Hand-rolled SHA-256 (always compiled, gated at call sites by feature flag)
 pub mod sha256;
-pub mod sha256_crate;
 
-// Select which SHA-256 implementation to use based on feature flags
-#[cfg(feature = "sha2-crate")]
-pub use sha256_crate as sha256_impl;
-
-#[cfg(feature = "sha256-handrolled")]
-pub use sha256 as sha256_impl;
+// xxHash3 64-bit (always compiled, gated at call sites by feature flag)
+#[cfg(feature = "xxh3")]
+pub mod xxh3;
 
 #[derive(Debug)]
 pub enum ImgHashKind {
     Phash,
-    Sha256(String), // this describes the rotation & flip performed on the image
+    /// Hand-rolled SHA-256; the String describes the transform applied
+    /// (e.g. `"imgdata"`, `"imgdata rot90"`, `"imgdata flipv"`).
+    Sha256(String),
+    /// xxHash3 64-bit; the String describes the transform applied.
+    Xxh3(String),
 }
 
 impl fmt::Display for ImgHashKind {
@@ -24,6 +26,7 @@ impl fmt::Display for ImgHashKind {
         match self {
             ImgHashKind::Phash => write!(f, "phash"),
             ImgHashKind::Sha256(s) => write!(f, "sha256 {}", s),
+            ImgHashKind::Xxh3(s) => write!(f, "xxh3 {}", s),
         }
     }
 }

@@ -16,43 +16,43 @@ pub struct ScanStats {
 
 /// Controls which hash variants are computed during a scan.
 ///
-/// The base SHA-256 of raw pixel data (`imgdata`) is always included.
-/// All other variants are opt-in.
+/// The base exact hash of raw pixel data (`imgdata`) is always included for
+/// whichever exact-hash algorithms are compiled in (see feature flags `xxh3`
+/// and `sha256`).  All orientation variants are opt-in.
 #[derive(Debug, Clone)]
 pub struct ScanOptions {
-    /// SHA-256 of the 3 rotations (rot90, rot180, rot270)
-    pub sha256_rotations: bool,
-    /// SHA-256 of the vertical flip and its 3 rotations
-    pub sha256_flips: bool,
+    /// Include the 3 rotation variants (rot90, rot180, rot270)
+    pub rotations: bool,
+    /// Include the vertical flip and its 3 rotations
+    pub flips: bool,
     /// Perceptual hash (average hash)
     pub phash: bool,
 }
 
 impl ScanOptions {
-    /// Only the base SHA-256 (`imgdata`). Fastest; good for exact-duplicate detection.
+    /// Only the base exact hash (`imgdata`). Fastest; good for exact-duplicate detection.
     pub fn default() -> Self {
         Self {
-            sha256_rotations: false,
-            sha256_flips: false,
+            rotations: false,
+            flips: false,
             phash: false,
         }
     }
 
-    /// Base SHA-256 plus the 3 rotation variants — detects rotated exact duplicates.
-    /// No flip variants, no phash.
+    /// Base exact hash plus the 3 rotation variants — detects rotated exact duplicates.
     pub fn exact() -> Self {
         Self {
-            sha256_rotations: true,
-            sha256_flips: false,
+            rotations: true,
+            flips: false,
             phash: false,
         }
     }
 
-    /// Every hash variant: all 8 SHA-256 orientations plus phash.
+    /// Every hash variant: all 8 orientation hashes plus phash.
     pub fn all() -> Self {
         Self {
-            sha256_rotations: true,
-            sha256_flips: true,
+            rotations: true,
+            flips: true,
             phash: true,
         }
     }
@@ -110,21 +110,33 @@ pub async fn process_path(path: PathBuf, recursive: bool, opts: &ScanOptions, po
                 continue;
             }
 
-            match hash::sha256_impl::selected_hashes_of_img_data(
-                &curr,
-                opts.sha256_rotations,
-                opts.sha256_flips,
-            ) {
-                Ok(shs) => {
-                    for sh in shs {
-                        if let Err(err) = db::save(pool, &sh).await {
+            // --- xxh3 exact hashes (compiled in when the `xxh3` feature is active) ---
+            #[cfg(feature = "xxh3")]
+            match hash::xxh3::selected_hashes_of_img_data(&curr, opts.rotations, opts.flips) {
+                Ok(hashes) => {
+                    for h in hashes {
+                        if let Err(err) = db::save(pool, &h).await {
+                            println!("Cannot save xxh3 hash for {}: {}", file_name, err);
+                        }
+                    }
+                }
+                Err(err) => println!("Cannot compute xxh3 for {}: {}", file_name, err),
+            }
+
+            // --- sha256 exact hashes (compiled in when the `sha256` feature is active) ---
+            #[cfg(feature = "sha256")]
+            match hash::sha256::selected_hashes_of_img_data(&curr, opts.rotations, opts.flips) {
+                Ok(hashes) => {
+                    for h in hashes {
+                        if let Err(err) = db::save(pool, &h).await {
                             println!("Cannot save sha256 hash for {}: {}", file_name, err);
                         }
                     }
                 }
-                Err(err) => println!("Cannot hash sha256 for {}: {}", file_name, err),
+                Err(err) => println!("Cannot compute sha256 for {}: {}", file_name, err),
             }
 
+            // --- perceptual hash ---
             if opts.phash {
                 match hash::phash::hash_path(&curr) {
                     Ok(ph) => {

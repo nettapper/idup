@@ -38,18 +38,19 @@ pub async fn open_pool() -> Result<SqlitePool, sqlx::Error> {
 pub async fn exact_match(pool: &SqlitePool, path: &Path) -> Result<Vec<ImgData>, sqlx::Error> {
     let path = normalize_path(path);
 
+    // Match on the base imgdata hash for any exact-hash algorithm
+    // (e.g. "xxh3 imgdata", "sha256 imgdata").
     let query = "
         SELECT DISTINCT i_dup.path AS path
         FROM images i
         JOIN hashes h
           ON i.images_id = h.images_id
         JOIN hashes h_dup
-          ON h.hash = h_dup.hash
+          ON h.hash = h_dup.hash AND h.kind = h_dup.kind
         JOIN images i_dup
           ON h_dup.images_id = i_dup.images_id
         WHERE i.path = ?
-          AND h.kind LIKE 'sha256%'
-          AND h_dup.kind LIKE 'sha256%';
+          AND h.kind LIKE '% imgdata';
     ";
 
     query_as::<_, ImgData>(query)
@@ -61,20 +62,23 @@ pub async fn exact_match(pool: &SqlitePool, path: &Path) -> Result<Vec<ImgData>,
 pub async fn exact_matches_grouped(
     pool: &SqlitePool,
 ) -> Result<Vec<ImgDataGrouped>, sqlx::Error> {
+    // Group by (kind, hash) so that xxh3 and sha256 duplicates are each
+    // reported as their own group. Only the base `imgdata` kind is used
+    // (no rotation/flip variants) to avoid spurious cross-matches.
     let query = "
-        SELECT a.hash AS group_hash, i.path AS path
+        SELECT a.kind || ':' || a.hash AS group_hash, i.path AS path
         FROM images i
         JOIN hashes a
           ON i.images_id = a.images_id
-         AND a.kind = 'sha256 imgdata'
-        WHERE a.hash IN (
-            SELECT hash
+         AND a.kind LIKE '% imgdata'
+        WHERE (a.kind, a.hash) IN (
+            SELECT kind, hash
             FROM hashes
-            WHERE kind = 'sha256 imgdata'
-            GROUP BY hash
+            WHERE kind LIKE '% imgdata'
+            GROUP BY kind, hash
             HAVING COUNT(*) > 1
         )
-        ORDER BY a.hash, i.path;
+        ORDER BY group_hash, i.path;
     ";
 
     query_as::<_, ImgDataGrouped>(query).fetch_all(pool).await
@@ -255,21 +259,31 @@ pub async fn random_images_seeded(
     Ok(rows)
 }
 
-/// Returns all image paths that share the given `sha256 imgdata` group hash.
+/// Returns all paths that share the given group hash.
+///
+/// `group_hash` is formatted as `"<kind>:<hash>"` (e.g. `"xxh3 imgdata:abc123"`),
+/// matching what `exact_matches_grouped` produces in its `group_hash` column.
 pub async fn images_for_group(
     pool: &SqlitePool,
     group_hash: &str,
 ) -> Result<Vec<ImgData>, sqlx::Error> {
+    // Split on the first ':' — kind is everything before, hash is everything after.
+    let (kind, hash) = match group_hash.split_once(':') {
+        Some(pair) => pair,
+        None => return Ok(vec![]),
+    };
+
     let query = "
         SELECT i.path AS path
         FROM images i
         JOIN hashes h ON i.images_id = h.images_id
-        WHERE h.kind = 'sha256 imgdata'
+        WHERE h.kind = ?
           AND h.hash = ?
         ORDER BY i.path;
     ";
     query_as::<_, ImgData>(query)
-        .bind(group_hash)
+        .bind(kind)
+        .bind(hash)
         .fetch_all(pool)
         .await
 }

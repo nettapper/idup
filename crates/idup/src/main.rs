@@ -129,6 +129,16 @@ async fn main() -> sqlx::Result<()> {
                 Ok(ph) => println!("phash: {:?}", ph),
                 Err(err) => println!("phash err: {}", err),
             }
+            #[cfg(feature = "xxh3")]
+            {
+                use image::ImageReader;
+                match ImageReader::open(&file).and_then(|r| r.with_guessed_format()).map(|r| r.decode()) {
+                    Ok(Ok(img)) => println!("xxh3: {}", hash::xxh3::hash(&img.into_bytes())),
+                    Ok(Err(err)) => println!("xxh3 decode err: {}", err),
+                    Err(err) => println!("xxh3 open err: {}", err),
+                }
+            }
+            #[cfg(feature = "sha256")]
             match hash::sha256::hash_path(&file) {
                 Ok(sh) => println!("sha256: {:?}", sh),
                 Err(err) => println!("sha256 err: {}", err),
@@ -142,8 +152,8 @@ async fn main() -> sqlx::Result<()> {
                 scan::ScanOptions::exact()
             } else if phash || rotations || flips {
                 scan::ScanOptions {
-                    sha256_rotations: rotations,
-                    sha256_flips: flips,
+                    rotations,
+                    flips,
                     phash,
                 }
             } else {

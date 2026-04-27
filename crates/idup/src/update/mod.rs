@@ -99,45 +99,12 @@ pub async fn process_update(path: Option<PathBuf>, cleanup: bool, pool: &SqliteP
             continue;
         }
 
-        // Compute base SHA-256 hash
-        let base_sha256 = match hash::sha256::hash_path(path) {
-            Ok(h) => h,
-            Err(err) => {
-                eprintln!("Error computing SHA-256 for {}: {}", img.path, err);
-                counter.fetch_add(1, Ordering::Relaxed);
-                continue;
-            }
-        };
-
-        // Get the current base SHA-256 from DB
-        let db_base_hash = match db::get_single_hash(pool, &img.path, "sha256 imgdata").await {
-            Ok(Some(h)) => h,
-            Ok(None) => {
-                eprintln!("No base SHA-256 found in DB for: {}", img.path);
-                counter.fetch_add(1, Ordering::Relaxed);
-                continue;
-            }
-            Err(err) => {
-                eprintln!("Error fetching hash from DB: {}", err);
-                counter.fetch_add(1, Ordering::Relaxed);
-                continue;
-            }
-        };
-
-        // Check if hashes match
-        if base_sha256.hash == db_base_hash {
-            // Hashes match, file is verified
+        // Verify the image against whatever base hashes exist in the DB.
+        // We check each active algorithm independently and consider the image
+        // verified only if every present base hash matches.
+        let verified = verify_and_maybe_update(pool, path, &img.path, &mut updated_count).await;
+        if verified {
             verified_count += 1;
-        } else {
-            // Hash mismatch: recompute ALL hash kinds that exist in DB for this image
-            match recompute_all_hashes(pool, path, &img.path).await {
-                Ok(count) => {
-                    updated_count += count;
-                }
-                Err(err) => {
-                    eprintln!("Error recomputing hashes for {}: {}", img.path, err);
-                }
-            }
         }
 
         counter.fetch_add(1, Ordering::Relaxed);
@@ -170,67 +137,168 @@ pub async fn process_update(path: Option<PathBuf>, cleanup: bool, pool: &SqliteP
     stats
 }
 
-/// Recompute all hash kinds that exist in the DB for the given image.
-/// Returns the count of hashes that were updated.
-async fn recompute_all_hashes(
+/// Check a single image against all base hashes stored in the DB.
+/// If any algorithm's hash has changed, recompute all hash kinds for that
+/// algorithm and update the DB.
+///
+/// Returns `true` if every present base hash matched (image unchanged).
+async fn verify_and_maybe_update(
     pool: &SqlitePool,
     file_path: &Path,
     db_path: &str,
-) -> Result<usize, Box<dyn std::error::Error>> {
-    // Get all hash kinds stored for this image
-    let hash_kinds = db::get_hash_kinds_for_image(pool, db_path).await?;
+    updated_count: &mut usize,
+) -> bool {
+    let mut all_verified = true;
 
-    let mut count = 0;
-    let mut sha256_processed = false;
-
-    for kind in &hash_kinds {
-        if kind == "phash" {
-            // Recompute perceptual hash
-            match hash::phash::hash_path(file_path) {
-                Ok(ph) => {
-                    db::save(pool, &ph).await?;
-                    count += 1;
-                }
-                Err(err) => {
-                    eprintln!("Error computing phash for {}: {}", db_path, err);
-                }
+    // --- xxh3 ---
+    #[cfg(feature = "xxh3")]
+    {
+        if let Some(verified) =
+            check_and_update_xxh3(pool, file_path, db_path, updated_count).await
+        {
+            if !verified {
+                all_verified = false;
             }
-        } else if kind.starts_with("sha256") && !sha256_processed {
-            // This is a SHA-256 variant, we need to recompute all SHA-256 variants
-            // based on the kinds that exist in the DB
-            // We'll do this only once per file to avoid recomputing multiple times
-
-            // Collect all sha256 kinds
-            let sha256_kinds: Vec<_> = hash_kinds
-                .iter()
-                .filter(|k| k.starts_with("sha256"))
-                .collect();
-
-            if sha256_kinds.is_empty() {
-                continue;
-            }
-
-            // Determine which options were used originally
-            let needs_rotations = sha256_kinds.iter().any(|k| k.contains("rot90") || k.contains("rot180") || k.contains("rot270"));
-            let needs_flips = sha256_kinds.iter().any(|k| k.contains("flipv") || k.contains("fliph"));
-
-            // Recompute SHA-256 hashes with the original options
-            match hash::sha256::selected_hashes_of_img_data(file_path, needs_rotations, needs_flips) {
-                Ok(shs) => {
-                    for sh in shs {
-                        db::save(pool, &sh).await?;
-                        count += 1;
-                    }
-                }
-                Err(err) => {
-                    eprintln!("Error computing SHA-256 for {}: {}", db_path, err);
-                }
-            }
-
-            // Only process SHA-256 once per file
-            sha256_processed = true;
         }
+        // None means no xxh3 base hash existed in DB — skip silently.
     }
 
-    Ok(count)
+    // --- sha256 ---
+    #[cfg(feature = "sha256")]
+    {
+        if let Some(verified) =
+            check_and_update_sha256(pool, file_path, db_path, updated_count).await
+        {
+            if !verified {
+                all_verified = false;
+            }
+        }
+        // None means no sha256 base hash existed in DB — skip silently.
+    }
+
+    // --- phash (always present if it was scanned) ---
+    if let Err(err) = maybe_update_phash(pool, file_path, db_path, updated_count).await {
+        eprintln!("Error handling phash for {}: {}", db_path, err);
+    }
+
+    all_verified
+}
+
+/// Returns `Some(true)` if xxh3 base hash matched, `Some(false)` if it changed
+/// (and hashes were recomputed), or `None` if no xxh3 base hash was in the DB.
+#[cfg(feature = "xxh3")]
+async fn check_and_update_xxh3(
+    pool: &SqlitePool,
+    file_path: &Path,
+    db_path: &str,
+    updated_count: &mut usize,
+) -> Option<bool> {
+    let db_hash = db::get_single_hash(pool, db_path, "xxh3 imgdata").await.ok()??;
+
+    // Recompute base xxh3 from pixel data
+    let raw_bytes = image::ImageReader::open(file_path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?
+        .decode()
+        .ok()?
+        .into_bytes();
+    let current = hash::xxh3::hash(&raw_bytes);
+
+    if current == db_hash {
+        return Some(true);
+    }
+
+    // Hash changed — recompute all xxh3 orientation variants present in DB
+    let hash_kinds = db::get_hash_kinds_for_image(pool, db_path).await.ok()?;
+    let needs_rotations = hash_kinds.iter().any(|k| k.starts_with("xxh3") && k.contains("rot"));
+    let needs_flips = hash_kinds.iter().any(|k| k.starts_with("xxh3") && k.contains("flip"));
+
+    match hash::xxh3::selected_hashes_of_img_data(file_path, needs_rotations, needs_flips) {
+        Ok(hashes) => {
+            for h in hashes {
+                if let Err(err) = db::save(pool, &h).await {
+                    eprintln!("Error saving xxh3 hash for {}: {}", db_path, err);
+                } else {
+                    *updated_count += 1;
+                }
+            }
+        }
+        Err(err) => eprintln!("Error recomputing xxh3 for {}: {}", db_path, err),
+    }
+
+    Some(false)
+}
+
+/// Returns `Some(true)` if sha256 base hash matched, `Some(false)` if it changed
+/// (and hashes were recomputed), or `None` if no sha256 base hash was in the DB.
+#[cfg(feature = "sha256")]
+async fn check_and_update_sha256(
+    pool: &SqlitePool,
+    file_path: &Path,
+    db_path: &str,
+    updated_count: &mut usize,
+) -> Option<bool> {
+    let db_hash = db::get_single_hash(pool, db_path, "sha256 imgdata").await.ok()??;
+
+    // Recompute base sha256 from pixel data
+    let raw_bytes = image::ImageReader::open(file_path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?
+        .decode()
+        .ok()?
+        .into_bytes();
+    let current = hash::sha256::hash(raw_bytes);
+
+    if current == db_hash {
+        return Some(true);
+    }
+
+    // Hash changed — recompute all sha256 orientation variants present in DB
+    let hash_kinds = db::get_hash_kinds_for_image(pool, db_path).await.ok()?;
+    let needs_rotations = hash_kinds.iter().any(|k| k.starts_with("sha256") && k.contains("rot"));
+    let needs_flips = hash_kinds.iter().any(|k| k.starts_with("sha256") && k.contains("flip"));
+
+    match hash::sha256::selected_hashes_of_img_data(file_path, needs_rotations, needs_flips) {
+        Ok(hashes) => {
+            for h in hashes {
+                if let Err(err) = db::save(pool, &h).await {
+                    eprintln!("Error saving sha256 hash for {}: {}", db_path, err);
+                } else {
+                    *updated_count += 1;
+                }
+            }
+        }
+        Err(err) => eprintln!("Error recomputing sha256 for {}: {}", db_path, err),
+    }
+
+    Some(false)
+}
+
+/// If a phash exists in the DB for this image, verify it is still current.
+/// (pHash doesn't change unless the image content itself changes, so we only
+/// recompute it when one of the exact-hash checks already found a mismatch —
+/// for simplicity here we just leave it as-is; phash is checked separately
+/// via `idup compare`.)
+async fn maybe_update_phash(
+    pool: &SqlitePool,
+    file_path: &Path,
+    db_path: &str,
+    updated_count: &mut usize,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let hash_kinds = db::get_hash_kinds_for_image(pool, db_path).await?;
+    if !hash_kinds.iter().any(|k| k == "phash") {
+        return Ok(());
+    }
+
+    match hash::phash::hash_path(file_path) {
+        Ok(ph) => {
+            db::save(pool, &ph).await?;
+            *updated_count += 1;
+        }
+        Err(err) => eprintln!("Error computing phash for {}: {}", db_path, err),
+    }
+
+    Ok(())
 }

@@ -18,7 +18,8 @@ The name is short for **image duplicates**.
 | Database | sqlx 0.8 with SQLite |
 | Image processing | image 0.25 |
 | File type detection | infer 0.19.0 (magic-byte MIME detection) |
-| Cryptographic hash | sha2 0.10 (SHA-256 implementation) |
+| Exact hash (default) | xxhash-rust 0.8 (xxHash3 64-bit) |
+| Exact hash (optional) | Hand-rolled SHA-256 (kept for reference) |
 | Logging | env_logger 0.11.8 (controlled via `RUST_LOG`) |
 | Web server | axum 0.8 |
 | Web UI | htmx 2.0 (CDN), hand-written HTML/CSS |
@@ -49,9 +50,9 @@ idup/                      # Workspace root
 │   │       │   └── mod.rs # Database layer (SQLite via sqlx)
 │   │       ├── hash/
 │   │       │   ├── mod.rs # Shared hash types (ImgHash, ImgHashKind) and Hamming distance
-│   │       │   ├── phash.rs      # Perceptual hash (average hash) — resize to 8x8, compare to mean
-│   │       │   ├── sha256.rs     # Hand-rolled SHA-256 implementation (kept for reference)
-│   │       │   └── sha256_crate.rs # SHA-256 via sha2 0.10 crate
+│   │       │   ├── phash.rs  # Perceptual hash (average hash) — resize to 8x8, compare to mean
+│   │       │   ├── xxh3.rs   # xxHash3 64-bit via xxhash-rust (default exact-hash impl)
+│   │       │   └── sha256.rs # Hand-rolled SHA-256 (optional exact-hash impl, kept for reference)
 │   │       ├── scan/
 │   │       │   └── mod.rs # Filesystem traversal and hashing orchestration
 │   │       ├── update/
@@ -96,14 +97,14 @@ Returns `ScanStats` with:
 ### `src/hash/phash.rs`
 `hash(img) -> u64` — resizes to 8×8, converts to grayscale, computes mean pixel value, produces a 64-bit integer where each bit is 1 if the corresponding pixel is above-mean. Low Hamming distance between two pHashes indicates perceptual similarity.
 
-### `src/hash/sha256.rs`
-Hand-rolled SHA-256 based on the Wikipedia pseudocode. Kept for reference and learning purposes. The crate now uses the `sha2` crate implementation instead (see `sha256_crate.rs`).
+### `src/hash/xxh3.rs`
+xxHash3 64-bit via the `xxhash-rust 0.8` crate. `selected_hashes_of_img_data(path, rotations, flips)` returns hashes covering all requested rotation/flip variants of the decoded pixel buffer. Active when the `xxh3` feature is enabled (the default). Hashes are stored in the DB with kind prefix `xxh3` (e.g. `"xxh3 imgdata"`, `"xxh3 imgdata rot90"`).
 
-### `src/hash/sha256_crate.rs`
-SHA-256 via the `sha2 0.10` crate. `selected_hashes_of_img_data(path)` returns hashes covering all rotation/flip variants of the decoded pixel buffer — used to detect exact pixel-identical images regardless of storage format or orientation.
+### `src/hash/sha256.rs`
+Hand-rolled SHA-256 based on the Wikipedia pseudocode. Kept for reference and learning purposes. Active when the `sha256` feature is enabled. Hashes are stored with kind prefix `sha256` (e.g. `"sha256 imgdata"`). Both `xxh3` and `sha256` can be enabled simultaneously.
 
 ### `src/hash/mod.rs`
-Defines `ImgHashKind` (`Phash` or `Sha256(String)` where the string names the transform, e.g. `"imgdata rot90"`), `ImgHash` struct, and `hamming_dist(a, b)`.
+Defines `ImgHashKind` (`Phash`, `Sha256(String)`, or `Xxh3(String)` — the string names the transform applied, e.g. `"imgdata rot90"`), `ImgHash` struct, and `hamming_dist(a, b)`.
 
 ### `src/db/mod.rs`
 SQLite schema with 3 tables:
@@ -184,12 +185,11 @@ The `idup web` command starts a local HTTP server. The UI has panels for each CL
 
 ## Architecture Notes
 
-- **Dual hashing**: Each image gets a perceptual hash (for near-duplicate/fuzzy matching) and pixel-data SHA-256 across 8 orientations (for exact duplicate detection including rotations/flips).
-- **Selectable SHA-256 implementation**: The project uses Cargo features to select between two SHA-256 implementations at compile time:
-  - **Default (`sha2-crate`)**: Production-grade `sha2 0.10` crate, recommended for normal use
-  - **Alternative (`sha256-handrolled`)**: Hand-rolled implementation for reference and learning purposes
-  - Both implementations are fully tested and produce identical results
-  - Both modules are always available in the codebase for examination
+- **Dual hashing**: Each image gets a perceptual hash (for near-duplicate/fuzzy matching) and a fast exact hash across up to 8 orientations (for exact duplicate detection including rotations/flips).
+- **Additive exact-hash features**: Two exact-hash algorithms are supported via Cargo features and can be active simultaneously:
+  - **`xxh3` (default)**: xxHash3 64-bit via `xxhash-rust`. Fast, non-cryptographic. DB kind prefix: `xxh3`.
+  - **`sha256` (optional)**: Hand-rolled SHA-256, kept for reference. DB kind prefix: `sha256`.
+  - The `sha2` crate dependency has been removed; `xxh3` is now the recommended production algorithm.
 - **Magic-byte file detection**: `infer` inspects file bytes rather than relying on file extensions. Also used by `/api/image` to set the correct `Content-Type` response header.
 - **Partial hash table**: `partial_hashes` splits pHash into 4-byte chunks with sequence numbers, laying groundwork for indexed fuzzy lookup (not yet surfaced in the CLI).
 - **Stack-based DFS traversal**: Avoids recursion-related stack overflows on deep directory trees.
@@ -204,37 +204,39 @@ The `idup web` command starts a local HTTP server. The UI has panels for each CL
 
 ### Features
 
-The `idup` crate supports selecting which SHA-256 implementation to use:
+The `idup` crate supports enabling one or both exact-hash algorithms via Cargo features. Both can be active at the same time.
 
 | Feature | Description |
 |---|---|
-| `sha2-crate` (default) | Uses the production-grade `sha2 0.10` crate |
-| `sha256-handrolled` | Uses the hand-rolled SHA-256 implementation (for reference/learning) |
+| `xxh3` (default) | xxHash3 64-bit via `xxhash-rust` — fast, non-cryptographic |
+| `sha256` | Hand-rolled SHA-256 — cryptographic, kept for reference/learning |
 
-**Note**: Only one feature can be active at a time. If neither is specified, `sha2-crate` is used by default.
+**Note**: At least one exact-hash feature must be active. If neither is specified, `xxh3` is used by default.
 
 ### Build commands
 
 ```sh
-# Build all workspace members (uses default sha2-crate feature)
+# Build all workspace members (uses default xxh3 feature)
 cargo build            # Debug build
 cargo build --release  # Optimized build (recommended for perf)
 
-# Build with specific SHA-256 implementation
-cargo build --no-default-features --features sha2-crate
-cargo build --no-default-features --features sha256-handrolled
+# Build with specific exact-hash algorithm(s)
+cargo build                                              # xxh3 only (default)
+cargo build --no-default-features --features sha256      # sha256 only
+cargo build --no-default-features --features "xxh3,sha256"  # both simultaneously
 
 # Build specific binaries
 cargo build --bin idup
 cargo build --bin igen
 
 # Run tests (from workspace root)
-cargo test --bins      # Run unit tests (SHA-256 known-vector tests, db tests)
+cargo test --bins      # Run unit tests (xxh3 + sha256 known-vector tests, db tests)
 cargo test --test '*'  # Run integration tests
 
-# Run tests with specific feature
-cargo test --bins --no-default-features --features sha2-crate
-cargo test --bins --no-default-features --features sha256-handrolled
+# Run tests with specific feature combination
+cargo test --bins                                              # xxh3 (default)
+cargo test --bins --no-default-features --features sha256      # sha256 only
+cargo test --bins --no-default-features --features "xxh3,sha256"  # both
 
 # Run commands directly
 cargo run --bin idup -- <cmd>      # Run idup CLI

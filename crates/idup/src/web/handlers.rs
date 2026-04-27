@@ -52,8 +52,8 @@ pub async fn scan(
         crate::scan::ScanOptions::exact()
     } else {
         crate::scan::ScanOptions {
-            sha256_rotations: form.rotations.is_some(),
-            sha256_flips: form.flips.is_some(),
+            rotations: form.rotations.is_some(),
+            flips: form.flips.is_some(),
             phash: form.phash.is_some(),
         }
     };
@@ -62,8 +62,8 @@ pub async fn scan(
 
     let mut notes: Vec<&str> = Vec::new();
     if recursive { notes.push("recursive"); }
-    if opts.sha256_rotations { notes.push("rotations"); }
-    if opts.sha256_flips { notes.push("flips"); }
+    if opts.rotations { notes.push("rotations"); }
+    if opts.flips { notes.push("flips"); }
     if opts.phash { notes.push("phash"); }
     let suffix = if notes.is_empty() {
         String::new()
