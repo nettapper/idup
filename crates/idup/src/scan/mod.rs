@@ -87,14 +87,19 @@ pub async fn process_path(path: PathBuf, recursive: bool, opts: &ScanOptions, po
 
     while let Some(curr) = stack.pop() {
         if curr.is_dir() {
-            if recursive {
-                for entry in read_dir(&curr)
-                    .unwrap_or_else(|_| panic!("Failed to read contents of dir={:?}", &curr))
-                {
-                    match entry {
-                        Ok(path_buf) => stack.push(path_buf.path()),
-                        Err(err) => println!("Cannot process entry with err={}", err),
+            // Always enumerate direct children of a directory.
+            for entry in read_dir(&curr)
+                .unwrap_or_else(|_| panic!("Failed to read contents of dir={:?}", &curr))
+            {
+                match entry {
+                    Ok(path_buf) => {
+                        let child = path_buf.path();
+                        // When not recursive, only push immediate files.
+                        if recursive || child.is_file() {
+                            stack.push(child);
+                        }
                     }
+                    Err(err) => println!("Cannot process entry with err={}", err),
                 }
             }
             continue;
