@@ -29,7 +29,7 @@ The name is short for **image duplicates**.
 
 ## Project Structure
 
-Workspace with two crates:
+Workspace with three crates:
 
 ```
 idup/                      # Workspace root
@@ -61,10 +61,18 @@ idup/                      # Workspace root
 │   │           ├── mod.rs # Axum router setup and server startup
 │   │           └── handlers.rs # HTTP handlers for all routes
 │   │
-│   └── igen/              # Performance test image generator
-│       ├── Cargo.toml     # igen crate manifest (minimal deps: just `image`)
+│   ├── igen/              # Performance test image generator
+│   │   ├── Cargo.toml     # igen crate manifest (minimal deps: just `image`)
+│   │   └── src/
+│   │       └── main.rs    # Standalone image generation utility
+│   │
+│   └── ivid/              # Video frame extractor CLI
+│       ├── Cargo.toml     # ivid crate manifest (minimal deps: just `clap`)
 │       └── src/
-│           └── main.rs    # Standalone image generation utility
+│           ├── main.rs    # CLI entry point, arg parsing, validation, orchestration
+│           ├── ffmpeg.rs  # ffmpeg/ffprobe subprocess wrappers
+│           ├── extract.rs # Frame extraction logic (time + frame modes)
+│           └── time.rs    # HH:MM:SS parsing and timestamp formatting utilities
 ```
 
 ---
@@ -165,6 +173,23 @@ idup clean                       # (stub) Remove outdated DB entries
 idup update [PATH] [--cleanup]   # Validate and refresh image hashes in the DB
 ```
 
+### `ivid` CLI
+
+```
+ivid <VIDEO> [OPTIONS]
+```
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `<VIDEO>` | positional | (required) | Path to the input video file |
+| `--interval` | `f64` | `1.0` | Interval between captures (seconds or frames, per `--interval-mode`). Accepts fractional values. |
+| `--interval-mode` | `time\|frame` | `time` | Whether `--interval` is in seconds or frames |
+| `--start` | `HH:MM:SS` | `00:00:00` | Start time for extraction |
+| `--stop` | `HH:MM:SS` | *(end of video)* | Stop time for extraction |
+| `--output`, `-o` | `path` | `./ivid_<video_stem>/` | Output directory for extracted frames |
+| `--mkdir` | flag | off | Create the output directory if it doesn't exist |
+| `--force` | flag | off | Overwrite existing output files |
+
 ## Web UI Features
 
 The `idup web` command starts a local HTTP server. The UI has panels for each CLI operation (scan, list, info, random, explore) plus image viewing:
@@ -197,6 +222,8 @@ The `idup web` command starts a local HTTP server. The UI has panels for each CL
 - **Web image serving is DB-gated**: `/api/image` only serves files whose absolute path is already tracked in the idup database. This prevents arbitrary file system access.
 - **Gallery page is server-rendered**: The `/gallery` handler builds the full HTML string in Rust (no template engine). Paths are embedded directly into `<img src="/api/image?path=...">` tags with percent-encoded URLs.
 - **No external services**: Entirely self-contained. The web UI loads htmx from a CDN but otherwise requires no network access.
+- **ivid shells out to ffmpeg**: The `ivid` crate uses `std::process::Command` to invoke `ffmpeg` (frame extraction) and `ffprobe` (video probing for duration and fps). No Rust video decoding libraries are used. ffmpeg availability is validated at startup.
+- **ivid supports two interval modes**: Time-based (default, in seconds) and frame-based (in frames). Sub-second intervals automatically switch filenames to include a millisecond component (e.g. `00h01m30s500ms`).
 
 ---
 

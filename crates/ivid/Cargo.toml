@@ -1,0 +1,9 @@
+[package]
+name = "ivid"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+clap = { version = "4.6.1", features = ["derive"] }
