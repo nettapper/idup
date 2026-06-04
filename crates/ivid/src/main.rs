@@ -131,13 +131,16 @@ fn run(cli: Cli) -> Result<(), String> {
         .and_then(|s| s.to_str())
         .unwrap_or("video");
 
+    let user_specified_output = cli.output.is_some();
     let output_dir = cli
         .output
         .unwrap_or_else(|| PathBuf::from(format!("ivid_{video_stem}")));
 
     // --- 7. Handle output directory existence ---
+    // The default directory (ivid_<stem>) is always auto-created.
+    // A user-specified --output directory requires --mkdir to be created.
     if !output_dir.exists() {
-        if cli.mkdir {
+        if !user_specified_output || cli.mkdir {
             std::fs::create_dir_all(&output_dir)
                 .map_err(|e| format!("Failed to create output directory: {e}"))?;
         } else {
