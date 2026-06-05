@@ -36,6 +36,7 @@ async fn serve(port: u16, open_browser: bool, pool: sqlx::SqlitePool) {
         .route("/api/extract", post(handlers::extract))
         .route("/api/update", post(handlers::update))
         .route("/api/clean", post(handlers::clean))
+        .route("/api/crop", post(handlers::crop))
         .route("/api/list", get(handlers::list))
         .route("/api/info", get(handlers::info))
         .route("/api/random", get(handlers::random))

@@ -29,7 +29,7 @@ The name is short for **image duplicates**.
 
 ## Project Structure
 
-Workspace with four crates:
+Workspace with five crates:
 
 ```
 idup/                      # Workspace root
@@ -70,14 +70,20 @@ idup/                      # Workspace root
 │   │   └── src/
 │   │       └── main.rs    # Standalone image generation utility
 │   │
-│   └── ivid/              # Video frame extractor CLI and library
-│       ├── Cargo.toml     # ivid crate manifest (defines lib and bin targets)
+│   ├── ivid/              # Video frame extractor CLI and library
+│   │   ├── Cargo.toml     # ivid crate manifest (defines lib and bin targets)
+│   │   └── src/
+│   │       ├── lib.rs     # Library root — re-exports extract, ffmpeg, time
+│   │       ├── main.rs    # CLI entry point, arg parsing, validation, orchestration
+│   │       ├── ffmpeg.rs  # ffmpeg/ffprobe subprocess wrappers
+│   │       ├── extract.rs # Frame extraction logic (single-command time + frame modes)
+│   │       └── time.rs    # HH:MM:SS parsing utilities
+│   │
+│   └── icrop/             # (Planned) Image rotation and cropping CLI and library
+│       ├── Cargo.toml     # icrop crate manifest (defines lib and bin targets)
 │       └── src/
-│           ├── lib.rs     # Library root — re-exports extract, ffmpeg, time
-│           ├── main.rs    # CLI entry point, arg parsing, validation, orchestration
-│           ├── ffmpeg.rs  # ffmpeg/ffprobe subprocess wrappers
-│           ├── extract.rs # Frame extraction logic (single-command time + frame modes)
-│           └── time.rs    # HH:MM:SS parsing utilities
+│           ├── lib.rs     # Library root — rotation and crop algorithms
+│           └── main.rs    # CLI entry point, arg parsing, orchestration
 ```
 
 ---

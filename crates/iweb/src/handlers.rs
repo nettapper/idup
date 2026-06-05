@@ -1,9 +1,9 @@
 use axum::{
     extract::{Query, State},
     response::Html,
-    Form,
+    Form, Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::path::{Path, PathBuf};
 
@@ -577,7 +577,7 @@ pub async fn image_file(
     axum::response::Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, mime)
-        .header(header::CACHE_CONTROL, "public, max-age=3600")
+        .header(header::CACHE_CONTROL, "no-store, no-cache, must-revalidate")
         .body(Body::from(bytes))
         .unwrap()
 }
@@ -897,7 +897,7 @@ const EXPLORE_CSS: &str = r#"
       border-radius: 10px;
       max-width: min(92vw, 860px);
       width: 100%;
-      max-height: 92vh;
+      height: min(92vh, 680px);
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -942,7 +942,7 @@ const EXPLORE_CSS: &str = r#"
     }
     .modal-img-area img {
       max-width: 100%;
-      max-height: calc(92vh - 120px);
+      max-height: 100%;
       object-fit: contain;
       display: block;
     }
@@ -970,6 +970,108 @@ const EXPLORE_CSS: &str = r#"
     .modal-btn:hover { background: #7c6af7; color: #fff; }
     .modal-btn.secondary { border-color: #2d3148; color: #64748b; }
     .modal-btn.secondary:hover { background: #2d3148; color: #e2e8f0; }
+
+    /* Crop Mode styles */
+    .crop-workspace {
+      display: none;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      position: relative;
+    }
+    .modal-overlay.crop-mode #modal-img { display: none; }
+    .modal-overlay.crop-mode .crop-workspace { display: flex; }
+    
+    .crop-controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      width: 100%;
+      padding: 0.5rem 1rem;
+      background: #151821;
+      border-bottom: 1px solid #2d3148;
+      font-size: 0.78rem;
+      flex-wrap: wrap;
+    }
+    .crop-control-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .crop-control-group label {
+      color: #94a3b8;
+    }
+    .crop-control-group input[type="range"] {
+      width: 120px;
+      accent-color: #7c6af7;
+    }
+    .crop-control-group input[type="number"], .crop-control-group input[type="text"] {
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 4px;
+      color: #e2e8f0;
+      padding: 0.2rem 0.4rem;
+      font-family: inherit;
+      font-size: 0.75rem;
+    }
+    .crop-canvas-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+      background: #0f1117;
+      min-height: 0;
+      padding: 1.5rem;
+    }
+    #crop-canvas {
+      display: block;
+      cursor: crosshair;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .crop-footer-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .crop-save-dialog {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      font-size: 0.78rem;
+    }
+    .crop-save-dialog label {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      cursor: pointer;
+      color: #94a3b8;
+    }
+    .crop-save-dialog input[type="text"] {
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 4px;
+      color: #e2e8f0;
+      padding: 0.2rem 0.4rem;
+      font-family: inherit;
+      font-size: 0.75rem;
+      width: 180px;
+    }
+    .crop-footer-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
 "#;
 
 const EXPLORE_MODAL_HTML: &str = r##"  <div class="modal-overlay" id="modal" role="dialog" aria-modal="true">
@@ -980,9 +1082,42 @@ const EXPLORE_MODAL_HTML: &str = r##"  <div class="modal-overlay" id="modal" rol
       </div>
       <div class="modal-img-area">
         <img id="modal-img" src="" alt="" />
+        <div class="crop-workspace">
+          <div class="crop-controls">
+            <div class="crop-control-group">
+              <label for="rotate-slider">Rotate:</label>
+              <input type="range" id="rotate-slider" min="-180" max="180" step="0.5" value="0" />
+              <input type="number" id="rotate-num" min="-180" max="180" step="0.5" value="0" style="width: 65px;" />
+              <span>&deg;</span>
+            </div>
+            <button class="modal-btn secondary" id="reset-crop-btn" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">Reset</button>
+          </div>
+          <div class="crop-canvas-container">
+            <canvas id="crop-canvas"></canvas>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
-        <a id="modal-open" href="#" target="_blank" class="modal-btn secondary">Open image</a>
+        <div class="viewer-footer-controls" id="viewer-footer-controls" style="display: flex; gap: 0.5rem; align-items: center; width: 100%;">
+          <a id="modal-open" href="#" target="_blank" class="modal-btn secondary">Open image</a>
+          <button id="modal-crop-btn" class="modal-btn">Crop &amp; Rotate</button>
+        </div>
+        <div class="crop-footer-controls" id="crop-footer-controls" style="display: none;">
+          <div class="crop-save-dialog">
+            <label>
+              <input type="checkbox" id="crop-overwrite" checked />
+              Overwrite original
+            </label>
+            <div id="crop-filename-group" style="display: none; align-items: center; gap: 0.3rem;">
+              <label for="crop-filename">New name:</label>
+              <input type="text" id="crop-filename" placeholder="image_cropped.png" />
+            </div>
+          </div>
+          <div class="crop-footer-actions">
+            <button id="crop-cancel-btn" class="modal-btn secondary">Cancel</button>
+            <button id="crop-save-btn" class="modal-btn">Save Crop</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -997,6 +1132,27 @@ const EXPLORE_SCRIPT: &str = r#"  <script>
 
     const cards = Array.from(document.querySelectorAll('.card'));
     let currentCardIndex = -1;
+
+    // Crop Editor Elements
+    const cropBtn              = document.getElementById('modal-crop-btn');
+    const cropWorkspace        = document.querySelector('.crop-workspace');
+    const viewerFooterControls = document.getElementById('viewer-footer-controls');
+    const cropFooterControls   = document.getElementById('crop-footer-controls');
+    const cropCanvas           = document.getElementById('crop-canvas');
+    const rotateSlider         = document.getElementById('rotate-slider');
+    const rotateNum            = document.getElementById('rotate-num');
+    const resetCropBtn         = document.getElementById('reset-crop-btn');
+    const cropOverwrite        = document.getElementById('crop-overwrite');
+    const cropFilenameGroup    = document.getElementById('crop-filename-group');
+    const cropFilename         = document.getElementById('crop-filename');
+    const cropCancelBtn        = document.getElementById('crop-cancel-btn');
+    const cropSaveBtn          = document.getElementById('crop-save-btn');
+
+    let cropImg = new Image();
+    let cropRotation = 0;
+    let cropBox = null;
+    const cropPad = 50;
+    let cropDragState = { active: false, type: null, handle: null, startX: 0, startY: 0, boxStartX: 0, boxStartY: 0, boxStartW: 0, boxStartH: 0 };
 
     function updateModalContent() {
       if (currentCardIndex < 0 || currentCardIndex >= cards.length) return;
@@ -1033,7 +1189,14 @@ const EXPLORE_SCRIPT: &str = r#"  <script>
       }
     }
 
+    function exitCropMode() {
+      modal.classList.remove('crop-mode');
+      viewerFooterControls.style.display = 'flex';
+      cropFooterControls.style.display = 'none';
+    }
+
     function closeModal(fromPopstate) {
+      exitCropMode();
       modal.classList.remove('open');
       modalImg.src = '';
       currentCardIndex = -1;
@@ -1059,13 +1222,16 @@ const EXPLORE_SCRIPT: &str = r#"  <script>
       if (e.key === 'Escape') {
         closeModal(false);
       } else if (e.key === 'ArrowRight') {
+        if (modal.classList.contains('crop-mode')) return;
         showNext();
       } else if (e.key === 'ArrowLeft') {
+        if (modal.classList.contains('crop-mode')) return;
         showPrev();
       }
     });
 
     imgArea.addEventListener('mousemove', e => {
+      if (modal.classList.contains('crop-mode')) return;
       const rect = imgArea.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const width = rect.width;
@@ -1079,6 +1245,7 @@ const EXPLORE_SCRIPT: &str = r#"  <script>
     });
 
     imgArea.addEventListener('click', e => {
+      if (modal.classList.contains('crop-mode')) return;
       const rect = imgArea.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const width = rect.width;
@@ -1087,6 +1254,487 @@ const EXPLORE_SCRIPT: &str = r#"  <script>
       } else if (x > width * 0.75) {
         showNext();
       }
+    });
+
+    // ── Crop Editor interactive logic ─────────────────────────────────────────
+
+    function initCropEditor() {
+      cropRotation = 0;
+      rotateSlider.value = 0;
+      rotateNum.value = 0;
+      cropBox = null;
+      
+      const card = cards[currentCardIndex];
+      const path = card.dataset.path;
+      
+      cropOverwrite.checked = true;
+      cropFilenameGroup.style.display = 'none';
+      
+      const filename = path.split('/').pop();
+      const dotIndex = filename.lastIndexOf('.');
+      const stem = dotIndex !== -1 ? filename.substring(0, dotIndex) : filename;
+      const ext = dotIndex !== -1 ? filename.substring(dotIndex + 1) : 'png';
+      cropFilename.value = stem + '_cropped.' + ext;
+      
+      cropImg.src = modalImg.src;
+      cropImg.onload = () => {
+        // Wait for DOM layout to settle and size computations to be correct
+        setTimeout(drawCropCanvas, 150);
+      };
+    }
+
+    function drawCropCanvas() {
+      if (!cropImg.complete || cropImg.naturalWidth === 0) return;
+      
+      const ctx = cropCanvas.getContext('2d');
+      const w_orig = cropImg.naturalWidth;
+      const h_orig = cropImg.naturalHeight;
+      
+      const alpha = cropRotation * Math.PI / 180.0;
+      const cos = Math.abs(Math.cos(alpha));
+      const sin = Math.abs(Math.sin(alpha));
+      const w_rot = w_orig * cos + h_orig * sin;
+      const h_rot = w_orig * sin + h_orig * cos;
+      
+      const w_work = w_rot + cropPad * 2;
+      const h_work = h_rot + cropPad * 2;
+      
+      const container = document.querySelector('.crop-canvas-container');
+      const rect = container.getBoundingClientRect();
+      const w_max = Math.max(10, rect.width - 48) || 600;
+      const h_max = Math.max(10, rect.height - 48) || 400;
+      
+      const scale = Math.min(w_max / w_work, h_max / h_work, 1.0);
+      
+      cropCanvas.width = w_work * scale;
+      cropCanvas.height = h_work * scale;
+      
+      const imgScale = scale;
+      const cx_canvas = cropCanvas.width / 2;
+      const cy_canvas = cropCanvas.height / 2;
+      
+      if (!cropBox) {
+        const bw = w_rot * imgScale * 0.8;
+        const bh = h_rot * imgScale * 0.8;
+        cropBox = {
+          x: cx_canvas - bw / 2,
+          y: cy_canvas - bh / 2,
+          w: bw,
+          h: bh
+        };
+      }
+      
+      // Checkerboard background
+      ctx.fillStyle = '#1e2230';
+      ctx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+      ctx.fillStyle = '#151821';
+      const chSize = 12;
+      for (let y = 0; y < cropCanvas.height; y += chSize * 2) {
+        for (let x = 0; x < cropCanvas.width; x += chSize * 2) {
+          ctx.fillRect(x, y, chSize, chSize);
+          ctx.fillRect(x + chSize, y + chSize, chSize, chSize);
+        }
+      }
+      
+      // Draw rotated image
+      ctx.save();
+      ctx.translate(cx_canvas, cy_canvas);
+      ctx.rotate(alpha);
+      ctx.drawImage(cropImg, -w_orig * imgScale / 2, -h_orig * imgScale / 2, w_orig * imgScale, h_orig * imgScale);
+      ctx.restore();
+      
+      // Dark overlay
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+      
+      // Redraw inside crop box
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(cropBox.x, cropBox.y, cropBox.w, cropBox.h);
+      ctx.clip();
+      ctx.translate(cx_canvas, cy_canvas);
+      ctx.rotate(alpha);
+      ctx.drawImage(cropImg, -w_orig * imgScale / 2, -h_orig * imgScale / 2, w_orig * imgScale, h_orig * imgScale);
+      ctx.restore();
+      
+      // Crop border
+      ctx.strokeStyle = '#7c6af7';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cropBox.x, cropBox.y, cropBox.w, cropBox.h);
+      
+      // Dashed grids
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(cropBox.x + cropBox.w / 3, cropBox.y);
+      ctx.lineTo(cropBox.x + cropBox.w / 3, cropBox.y + cropBox.h);
+      ctx.moveTo(cropBox.x + 2 * cropBox.w / 3, cropBox.y);
+      ctx.lineTo(cropBox.x + 2 * cropBox.w / 3, cropBox.y + cropBox.h);
+      ctx.moveTo(cropBox.x, cropBox.y + cropBox.h / 3);
+      ctx.lineTo(cropBox.x + cropBox.w, cropBox.y + cropBox.h / 3);
+      ctx.moveTo(cropBox.x, cropBox.y + 2 * cropBox.h / 3);
+      ctx.lineTo(cropBox.x + cropBox.w, cropBox.y + 2 * cropBox.h / 3);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // Handles
+      const handleSize = 8;
+      ctx.fillStyle = '#7c6af7';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      
+      const handles = {
+        tl: { x: cropBox.x, y: cropBox.y },
+        tr: { x: cropBox.x + cropBox.w, y: cropBox.y },
+        bl: { x: cropBox.x, y: cropBox.y + cropBox.h },
+        br: { x: cropBox.x + cropBox.w, y: cropBox.y + cropBox.h }
+      };
+      
+      for (const key in handles) {
+        const h = handles[key];
+        ctx.fillRect(h.x - handleSize / 2, h.y - handleSize / 2, handleSize, handleSize);
+        ctx.strokeRect(h.x - handleSize / 2, h.y - handleSize / 2, handleSize, handleSize);
+      }
+    }
+
+    function applySnapping(type, handle) {
+      if (!cropImg.complete || cropImg.naturalWidth === 0 || !cropBox) return;
+      
+      const w_orig = cropImg.naturalWidth;
+      const h_orig = cropImg.naturalHeight;
+      const alpha = cropRotation * Math.PI / 180.0;
+      const cos = Math.abs(Math.cos(alpha));
+      const sin = Math.abs(Math.sin(alpha));
+      const w_rot = w_orig * cos + h_orig * sin;
+      const h_rot = w_orig * sin + h_orig * cos;
+      
+      const w_work = w_rot + cropPad * 2;
+      
+      const scale = cropCanvas.width / w_work;
+      const imgScale = scale;
+      const cx_canvas = cropCanvas.width / 2;
+      const cy_canvas = cropCanvas.height / 2;
+      
+      const rx = cx_canvas - (w_rot * imgScale) / 2;
+      const ry = cy_canvas - (h_rot * imgScale) / 2;
+      const rx_end = rx + w_rot * imgScale;
+      const ry_end = ry + h_rot * imgScale;
+      
+      const snapThresh = 8;
+      
+      if (type === 'move') {
+        if (Math.abs(cropBox.x - rx) < snapThresh) {
+          cropBox.x = rx;
+        } else if (Math.abs(cropBox.x + cropBox.w - rx_end) < snapThresh) {
+          cropBox.x = rx_end - cropBox.w;
+        }
+        if (Math.abs(cropBox.y - ry) < snapThresh) {
+          cropBox.y = ry;
+        } else if (Math.abs(cropBox.y + cropBox.h - ry_end) < snapThresh) {
+          cropBox.y = ry_end - cropBox.h;
+        }
+      } else if (type === 'resize') {
+        if (handle === 'br') {
+          if (Math.abs(cropBox.x + cropBox.w - rx_end) < snapThresh) {
+            cropBox.w = rx_end - cropBox.x;
+          }
+          if (Math.abs(cropBox.y + cropBox.h - ry_end) < snapThresh) {
+            cropBox.h = ry_end - cropBox.y;
+          }
+        } else if (handle === 'tl') {
+          const oppositeX = cropBox.x + cropBox.w;
+          const oppositeY = cropBox.y + cropBox.h;
+          if (Math.abs(cropBox.x - rx) < snapThresh) {
+            cropBox.x = rx;
+            cropBox.w = oppositeX - rx;
+          }
+          if (Math.abs(cropBox.y - ry) < snapThresh) {
+            cropBox.y = ry;
+            cropBox.h = oppositeY - ry;
+          }
+        } else if (handle === 'tr') {
+          const oppositeY = cropBox.y + cropBox.h;
+          if (Math.abs(cropBox.x + cropBox.w - rx_end) < snapThresh) {
+            cropBox.w = rx_end - cropBox.x;
+          }
+          if (Math.abs(cropBox.y - ry) < snapThresh) {
+            cropBox.y = ry;
+            cropBox.h = oppositeY - ry;
+          }
+        } else if (handle === 'bl') {
+          const oppositeX = cropBox.x + cropBox.w;
+          if (Math.abs(cropBox.x - rx) < snapThresh) {
+            cropBox.x = rx;
+            cropBox.w = oppositeX - rx;
+          }
+          if (Math.abs(cropBox.y + cropBox.h - ry_end) < snapThresh) {
+            cropBox.h = ry_end - cropBox.y;
+          }
+        }
+      } else if (type === 'draw') {
+        if (Math.abs(cropBox.x - rx) < snapThresh) {
+          cropBox.w = cropBox.w + (cropBox.x - rx);
+          cropBox.x = rx;
+        }
+        if (Math.abs(cropBox.y - ry) < snapThresh) {
+          cropBox.h = cropBox.h + (cropBox.y - ry);
+          cropBox.y = ry;
+        }
+        if (Math.abs(cropBox.x + cropBox.w - rx_end) < snapThresh) {
+          cropBox.w = rx_end - cropBox.x;
+        }
+        if (Math.abs(cropBox.y + cropBox.h - ry_end) < snapThresh) {
+          cropBox.h = ry_end - cropBox.y;
+        }
+      }
+    }
+
+    function getMousePos(e) {
+      const rect = cropCanvas.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) * (cropCanvas.width / rect.width),
+        y: (e.clientY - rect.top) * (cropCanvas.height / rect.height)
+      };
+    }
+    
+    function getHandleAt(mx, my) {
+      const handleSize = 12;
+      const handles = {
+        tl: { x: cropBox.x, y: cropBox.y },
+        tr: { x: cropBox.x + cropBox.w, y: cropBox.y },
+        bl: { x: cropBox.x, y: cropBox.y + cropBox.h },
+        br: { x: cropBox.x + cropBox.w, y: cropBox.y + cropBox.h }
+      };
+      for (const key in handles) {
+        const h = handles[key];
+        if (Math.abs(mx - h.x) <= handleSize && Math.abs(my - h.y) <= handleSize) {
+          return key;
+        }
+      }
+      return null;
+    }
+    
+    function isInsideBox(mx, my) {
+      return mx >= cropBox.x && mx <= cropBox.x + cropBox.w &&
+             my >= cropBox.y && my <= cropBox.y + cropBox.h;
+    }
+    
+    cropCanvas.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const { x, y } = getMousePos(e);
+      const handle = getHandleAt(x, y);
+      
+      if (handle) {
+        cropDragState = {
+          active: true,
+          type: 'resize',
+          handle: handle,
+          startX: x,
+          startY: y,
+          boxStartX: cropBox.x,
+          boxStartY: cropBox.y,
+          boxStartW: cropBox.w,
+          boxStartH: cropBox.h
+        };
+      } else if (isInsideBox(x, y)) {
+        cropDragState = {
+          active: true,
+          type: 'move',
+          startX: x,
+          startY: y,
+          boxStartX: cropBox.x,
+          boxStartY: cropBox.y,
+          boxStartW: cropBox.w,
+          boxStartH: cropBox.h
+        };
+      } else {
+        cropDragState = {
+          active: true,
+          type: 'draw',
+          startX: x,
+          startY: y
+        };
+        cropBox = { x: x, y: y, w: 1, h: 1 };
+      }
+    });
+    
+    cropCanvas.addEventListener('mousemove', e => {
+      const { x, y } = getMousePos(e);
+      
+      if (!cropDragState.active) {
+        const handle = getHandleAt(x, y);
+        if (handle === 'tl' || handle === 'br') {
+          cropCanvas.style.cursor = 'nwse-resize';
+        } else if (handle === 'tr' || handle === 'bl') {
+          cropCanvas.style.cursor = 'nesw-resize';
+        } else if (isInsideBox(x, y)) {
+          cropCanvas.style.cursor = 'move';
+        } else {
+          cropCanvas.style.cursor = 'crosshair';
+        }
+      }
+      
+      if (cropDragState.active) {
+        if (cropDragState.type === 'move') {
+          const dx = x - cropDragState.startX;
+          const dy = y - cropDragState.startY;
+          cropBox.x = Math.max(0, Math.min(cropCanvas.width - cropBox.w, cropDragState.boxStartX + dx));
+          cropBox.y = Math.max(0, Math.min(cropCanvas.height - cropBox.h, cropDragState.boxStartY + dy));
+        } else if (cropDragState.type === 'resize') {
+          const dx = x - cropDragState.startX;
+          const dy = y - cropDragState.startY;
+          
+          if (cropDragState.handle === 'br') {
+            cropBox.w = Math.max(10, Math.min(cropCanvas.width - cropDragState.boxStartX, cropDragState.boxStartW + dx));
+            cropBox.h = Math.max(10, Math.min(cropCanvas.height - cropDragState.boxStartY, cropDragState.boxStartH + dy));
+          } else if (cropDragState.handle === 'tl') {
+            const oppositeX = cropDragState.boxStartX + cropDragState.boxStartW;
+            const oppositeY = cropDragState.boxStartY + cropDragState.boxStartH;
+            cropBox.x = Math.max(0, Math.min(oppositeX - 10, cropDragState.boxStartX + dx));
+            cropBox.y = Math.max(0, Math.min(oppositeY - 10, cropDragState.boxStartY + dy));
+            cropBox.w = oppositeX - cropBox.x;
+            cropBox.h = oppositeY - cropBox.y;
+          } else if (cropDragState.handle === 'tr') {
+            const oppositeY = cropDragState.boxStartY + cropDragState.boxStartH;
+            cropBox.w = Math.max(10, Math.min(cropCanvas.width - cropDragState.boxStartX, cropDragState.boxStartW + dx));
+            cropBox.y = Math.max(0, Math.min(oppositeY - 10, cropDragState.boxStartY + dy));
+            cropBox.h = oppositeY - cropBox.y;
+          } else if (cropDragState.handle === 'bl') {
+            const oppositeX = cropDragState.boxStartX + cropDragState.boxStartW;
+            cropBox.x = Math.max(0, Math.min(oppositeX - 10, cropDragState.boxStartX + dx));
+            cropBox.w = oppositeX - cropBox.x;
+            cropBox.h = Math.max(10, Math.min(cropCanvas.height - cropDragState.boxStartY, cropDragState.boxStartH + dy));
+          }
+        } else if (cropDragState.type === 'draw') {
+          const x0 = Math.min(cropDragState.startX, x);
+          const y0 = Math.min(cropDragState.startY, y);
+          const w0 = Math.abs(x - cropDragState.startX);
+          const h0 = Math.abs(y - cropDragState.startY);
+          cropBox = {
+            x: Math.max(0, x0),
+            y: Math.max(0, y0),
+            w: Math.max(10, Math.min(cropCanvas.width - x0, w0)),
+            h: Math.max(10, Math.min(cropCanvas.height - y0, h0))
+          };
+        }
+        applySnapping(cropDragState.type, cropDragState.handle);
+        drawCropCanvas();
+      }
+    });
+    
+    window.addEventListener('mouseup', () => {
+      cropDragState.active = false;
+    });
+
+    rotateSlider.addEventListener('input', e => {
+      cropRotation = parseFloat(e.target.value);
+      rotateNum.value = cropRotation;
+      drawCropCanvas();
+    });
+    
+    rotateNum.addEventListener('input', e => {
+      let val = parseFloat(e.target.value);
+      if (isNaN(val)) val = 0;
+      val = Math.max(-180, Math.min(180, val));
+      cropRotation = val;
+      rotateSlider.value = val;
+      drawCropCanvas();
+    });
+    
+    resetCropBtn.addEventListener('click', () => {
+      cropRotation = 0;
+      rotateSlider.value = 0;
+      rotateNum.value = 0;
+      cropBox = null;
+      drawCropCanvas();
+    });
+
+    cropOverwrite.addEventListener('change', () => {
+      if (cropOverwrite.checked) {
+        cropFilenameGroup.style.display = 'none';
+      } else {
+        cropFilenameGroup.style.display = 'flex';
+      }
+    });
+
+    cropBtn.addEventListener('click', () => {
+      modal.classList.add('crop-mode');
+      viewerFooterControls.style.display = 'none';
+      cropFooterControls.style.display = 'flex';
+      initCropEditor();
+    });
+    
+    cropCancelBtn.addEventListener('click', exitCropMode);
+
+    cropSaveBtn.addEventListener('click', () => {
+      if (!cropImg.complete || cropImg.naturalWidth === 0) return;
+      
+      const card = cards[currentCardIndex];
+      const path = card.dataset.path;
+      
+      const w_orig = cropImg.naturalWidth;
+      const h_orig = cropImg.naturalHeight;
+      const alpha = cropRotation * Math.PI / 180.0;
+      const cos = Math.abs(Math.cos(alpha));
+      const sin = Math.abs(Math.sin(alpha));
+      const w_rot = w_orig * cos + h_orig * sin;
+      
+      const w_work = w_rot + cropPad * 2;
+      const scale = cropCanvas.width / w_work;
+      
+      const x_rot = cropBox.x / scale - cropPad;
+      const y_rot = cropBox.y / scale - cropPad;
+      const w_rot_out = cropBox.w / scale;
+      const h_rot_out = cropBox.h / scale;
+      
+      const finalX = Math.round(x_rot);
+      const finalY = Math.round(y_rot);
+      const finalW = Math.round(w_rot_out);
+      const finalH = Math.round(h_rot_out);
+      
+      const overwrite = cropOverwrite.checked;
+      const newFilename = overwrite ? null : cropFilename.value;
+      
+      const payload = {
+        input_path: path,
+        overwrite: overwrite,
+        new_filename: newFilename,
+        rotate_deg: cropRotation,
+        crop_rect: {
+          x: finalX,
+          y: finalY,
+          w: finalW,
+          h: finalH
+        }
+      };
+      
+      cropSaveBtn.disabled = true;
+      cropSaveBtn.textContent = 'Saving...';
+      
+      fetch('/api/crop', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      })
+      .then(res => res.json())
+      .then(data => {
+        cropSaveBtn.disabled = false;
+        cropSaveBtn.textContent = 'Save Crop';
+        if (data.success) {
+          exitCropMode();
+          location.reload();
+        } else {
+          alert('Failed to crop image: ' + data.message);
+        }
+      })
+      .catch(err => {
+        cropSaveBtn.disabled = false;
+        cropSaveBtn.textContent = 'Save Crop';
+        alert('Error saving crop: ' + err);
+      });
     });
   </script>
 "#;
@@ -1151,3 +1799,91 @@ fn explore_href_seeded(seed: u64, n: u32, filter: Option<&str>) -> String {
     }
     href
 }
+
+// ── Crop handler ──────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct CropRect {
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+}
+
+#[derive(Deserialize)]
+pub struct CropRequest {
+    input_path: String,
+    overwrite: bool,
+    new_filename: Option<String>,
+    rotate_deg: Option<f64>,
+    crop_rect: Option<CropRect>,
+}
+
+#[derive(Serialize)]
+pub struct CropResponse {
+    success: bool,
+    message: String,
+    new_path: Option<String>,
+    img_src: Option<String>,
+}
+
+pub async fn crop(
+    State(pool): State<SqlitePool>,
+    Json(req): Json<CropRequest>,
+) -> Json<CropResponse> {
+    let in_path = Path::new(&req.input_path);
+    if !in_path.exists() {
+        return Json(CropResponse {
+            success: false,
+            message: format!("Input file does not exist: {}", req.input_path),
+            new_path: None,
+            img_src: None,
+        });
+    }
+
+    let out_path = if req.overwrite {
+        in_path.to_path_buf()
+    } else {
+        let parent = in_path.parent().unwrap_or_else(|| Path::new("."));
+        let name = match &req.new_filename {
+            Some(n) if !n.trim().is_empty() => n.trim().to_string(),
+            _ => {
+                let stem = in_path.file_stem().and_then(|s| s.to_str()).unwrap_or("image");
+                let ext = in_path.extension().and_then(|e| e.to_str()).unwrap_or("png");
+                format!("{}_cropped.{}", stem, ext)
+            }
+        };
+        parent.join(name)
+    };
+
+    let crop_rect_tuple = req.crop_rect.map(|r| (r.x, r.y, r.w, r.h));
+
+    // Call icrop library to rotate and crop
+    if let Err(err) = icrop::rotate_and_crop(in_path, &out_path, crop_rect_tuple, req.rotate_deg) {
+        return Json(CropResponse {
+            success: false,
+            message: format!("Image processing failed: {}", err),
+            new_path: None,
+            img_src: None,
+        });
+    }
+
+    // Immediately scan/hash the output path to update the database
+    let scan_opts = idup::scan::ScanOptions::all();
+    idup::scan::process_path(out_path.clone(), false, &scan_opts, &pool).await;
+
+    let out_path_str = out_path.to_string_lossy().into_owned();
+    let img_src = format!("/api/image?path={}", url_encode(&out_path_str));
+
+    Json(CropResponse {
+        success: true,
+        message: if req.overwrite {
+            "Image cropped and updated in-place.".to_string()
+        } else {
+            format!("Image cropped and saved as new file: {}", out_path.file_name().and_then(|f| f.to_str()).unwrap_or(""))
+        },
+        new_path: Some(out_path_str),
+        img_src: Some(img_src),
+    })
+}
+
