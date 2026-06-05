@@ -2,12 +2,12 @@
 
 rust cli program for finding duplicate images
 
-## Performace Test
+## Performance Test
 
-When running performace tests, ensure that you're running the optimzed build
+When running performance tests, ensure that you're running the optimized build
 
 ``` text
-cargo build --release
+make relase
 ```
 
-1400 images ~82 seconds on my hardware
+31462 files scanned in 691.35s (45.51 imgs/sec) on my hardware.
