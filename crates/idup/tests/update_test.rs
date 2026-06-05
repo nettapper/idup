@@ -5,10 +5,10 @@ use common::{image_gen, test_env::TestEnv};
 /// Full lifecycle test:
 ///
 /// 1. Scan a directory containing a duplicate pair + one unique image.
-/// 2. Confirm `list` reports the pair as duplicates.
+/// 2. Confirm `dups` reports the pair as duplicates.
 /// 3. Delete one of the duplicate pair from disk.
 /// 4. Run `update --cleanup` → missing file removed from DB.
-/// 5. Confirm `list` now reports no duplicates (orphaned original is unique).
+/// 5. Confirm `dups` now reports no duplicates (orphaned original is unique).
 /// 6. Run `clean` (confirmed with "y") → wipe the entire DB.
 /// 7. Confirm `random` reports an empty DB.
 #[test]
@@ -29,15 +29,15 @@ fn scan_update_cleanup_then_clean() {
         .success();
 
     // ── 3. Confirm duplicates are present ─────────────────────────────────
-    let out = env.cmd().arg("list").assert().success();
+    let out = env.cmd().arg("dups").assert().success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(
         stdout.contains("img_a.png"),
-        "expected img_a.png in list before update, got:\n{stdout}"
+        "expected img_a.png in dups before update, got:\n{stdout}"
     );
     assert!(
         stdout.contains("img_a_dup.png"),
-        "expected img_a_dup.png in list before update, got:\n{stdout}"
+        "expected img_a_dup.png in dups before update, got:\n{stdout}"
     );
 
     // ── 4. Delete one half of the duplicate pair from disk ────────────────
@@ -68,8 +68,8 @@ fn scan_update_cleanup_then_clean() {
         "expected 'Cleaned: 1' in update stdout, got:\n{stdout}"
     );
 
-    // ── 6. list → no duplicates (img_a.png is now the sole owner of its hash) ──
-    let out = env.cmd().arg("list").assert().success();
+    // ── 6. dups → no duplicates (img_a.png is now the sole owner of its hash) ──
+    let out = env.cmd().arg("dups").assert().success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(
         stdout.contains("No duplicates found."),

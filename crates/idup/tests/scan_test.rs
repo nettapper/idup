@@ -4,7 +4,7 @@ use common::{image_gen, test_env::TestEnv};
 
 /// Smoke test: scan a directory containing 3 unique images plus one exact
 /// duplicate (same seed as image A, different filename), then verify that
-/// `idup list` reports exactly one duplicate group.
+/// `idup dups` reports exactly one duplicate group.
 #[test]
 fn scan_detects_exact_duplicate() {
     let env = TestEnv::new();
@@ -23,29 +23,29 @@ fn scan_detects_exact_duplicate() {
         .assert()
         .success();
 
-    // Run `idup list` — should exit 0 and mention both paths that share a hash.
-    let output = env.cmd().arg("list").assert().success();
+    // Run `idup dups` — should exit 0 and mention both paths that share a hash.
+    let output = env.cmd().arg("dups").assert().success();
 
     let stdout = String::from_utf8(output.get_output().stdout.clone()).unwrap();
 
     // Both the original and its duplicate must appear in the output.
     assert!(
         stdout.contains("img_a.png"),
-        "expected img_a.png in list output, got:\n{stdout}"
+        "expected img_a.png in dups output, got:\n{stdout}"
     );
     assert!(
         stdout.contains("img_a_dup.png"),
-        "expected img_a_dup.png in list output, got:\n{stdout}"
+        "expected img_a_dup.png in dups output, got:\n{stdout}"
     );
 
     // The unique images must NOT appear (they have no duplicates).
     assert!(
         !stdout.contains("img_b.png"),
-        "img_b.png should not appear in list output, got:\n{stdout}"
+        "img_b.png should not appear in dups output, got:\n{stdout}"
     );
     assert!(
         !stdout.contains("img_c.png"),
-        "img_c.png should not appear in list output, got:\n{stdout}"
+        "img_c.png should not appear in dups output, got:\n{stdout}"
     );
 }
 

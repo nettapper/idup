@@ -62,7 +62,7 @@ enum Command {
     },
 
     /// Retrieve duplicates or near duplicates from the db
-    List {
+    Dups {
         /// File or folder
         #[arg(value_parser = clap::value_parser!(std::path::PathBuf))]
         path: Option<PathBuf>,
@@ -148,7 +148,7 @@ async fn main() -> sqlx::Result<()> {
             // Stats are printed inside process_path()
         }
 
-        Command::List { path } => {
+        Command::Dups { path } => {
             match path {
                 None => {
                     let data = db::exact_matches_grouped(&pool).await.unwrap();
