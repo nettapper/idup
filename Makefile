@@ -1,4 +1,4 @@
-.PHONY: build release test integration-test lint check clean all bench bench-flamegraph
+.PHONY: build release test test-unit test-integration lint check clean bench bench-flamegraph
 
 ## Build debug binary
 build:
@@ -8,17 +8,17 @@ build:
 release:
 	cargo build --release
 
-## Run unit tests only (tests embedded in src/, fast, no binary invocation)
+## Run all tests (unit + integration)
 test:
+	cargo test --workspace
+
+## Run unit tests only (tests embedded in src/, fast, no binary invocation)
+test-unit:
 	cargo test --bins
 
 ## Run integration tests (builds the binary first via assert_cmd)
-integration-test:
+test-integration:
 	cargo test -p idup --test '*'
-
-## Run all tests (unit + integration)
-all:
-	cargo test --workspace
 
 ## Lint with clippy
 lint:

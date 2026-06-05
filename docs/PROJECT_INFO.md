@@ -304,9 +304,9 @@ A `Makefile` is provided as a convenience wrapper:
 ```sh
 make build             # cargo build
 make release           # cargo build --release
-make test              # unit tests only (cargo test --bins)
-make integration-test  # integration tests only (cargo test --test '*')
-make all               # unit + integration
+make test              # run all tests (cargo test --workspace)
+make test-unit         # unit tests only (cargo test --bins)
+make test-integration  # integration tests only (cargo test -p idup --test '*')
 make lint              # cargo clippy -- -D warnings
 make clean             # cargo clean
 ```
