@@ -38,6 +38,10 @@
         <input type="checkbox" name="recursive" value="true" />
         Recursive
       </label>
+      <label class="checkbox-label">
+        <input type="checkbox" name="unzip" value="true" />
+        Unzip zip files
+      </label>
       <fieldset style="margin-top:0.75rem;border:1px solid var(--border,#333);padding:0.5rem 0.75rem;border-radius:4px">
         <legend style="font-size:0.8rem;padding:0 0.25rem">Hash variants</legend>
         <p class="muted" style="font-size:0.78rem;margin:0 0 0.5rem">
@@ -262,6 +266,10 @@
     if (params.get('recursive')) {
       const checkbox = document.querySelector(`#panel-${panel} input[name="recursive"]`);
       if (checkbox) checkbox.checked = params.get('recursive') === 'true';
+    }
+    if (params.get('unzip')) {
+      const checkbox = document.querySelector(`#panel-${panel} input[name="unzip"]`);
+      if (checkbox) checkbox.checked = params.get('unzip') === 'true';
     }
     // Clear the URL params (clean URL after applying)
     window.history.replaceState({}, '', '/');

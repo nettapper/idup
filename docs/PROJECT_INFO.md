@@ -172,7 +172,7 @@ Routes:
 ## CLI Commands
 
 ```
-idup scan <path> [--recursive]   # Scan path, compute and store hashes
+idup scan <path> [--recursive] [--unzip] # Scan path, compute and store hashes, optionally unzipping zip archives
 idup dups [<path>]               # List all exact duplicates (optionally for a specific file)
 idup random [N]                  # Return N random files from the db (default: 20)
 idup info <file>                 # Print phash + sha256 of a single file
@@ -222,7 +222,7 @@ The `iweb` binary starts a local HTTP server. The UI has panels for each CLI ope
   - `?seed=<u64>&n=<u32>&filter=<glob>` — deterministic random N images (used by the random panel)
   - The page always shows a filter bar (dir + glob inputs) for in-page navigation without returning to the SPA.
 - **Image serving** (`/api/image`): Serves local image files by absolute path. Access is gated: only paths tracked in the idup DB are served.
-- **Deep-linking and panel state**: The UI supports deep-linking via query parameters (e.g. `/?panel=scan&path=/some/dir&recursive=true`), automatically pre-filling the inputs and switching tabs on page load.
+- **Deep-linking and panel state**: The UI supports deep-linking via query parameters (e.g. `/?panel=scan&path=/some/dir&recursive=true&unzip=true`), automatically pre-filling the inputs and switching tabs on page load.
 
 ---
 

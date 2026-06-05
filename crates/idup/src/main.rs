@@ -33,6 +33,10 @@ enum Command {
         #[arg(short, long)]
         recursive: bool,
 
+        /// Unzip zip files and scan their contents
+        #[arg(long)]
+        unzip: bool,
+
         // ── Presets ────────────────────────────────────────────────────────
 
         /// [Preset] SHA-256 base + rotations, no flips, no phash
@@ -130,8 +134,8 @@ async fn main() -> sqlx::Result<()> {
             }
         }
 
-        Command::Scan { path, recursive, exact, all, phash, rotations, flips } => {
-            let opts = if all {
+        Command::Scan { path, recursive, unzip, exact, all, phash, rotations, flips } => {
+            let mut opts = if all {
                 scan::ScanOptions::all()
             } else if exact {
                 scan::ScanOptions::exact()
@@ -140,10 +144,12 @@ async fn main() -> sqlx::Result<()> {
                     rotations,
                     flips,
                     phash,
+                    unzip: false,
                 }
             } else {
                 scan::ScanOptions::default()
             };
+            opts.unzip = unzip;
             scan::process_path(path, recursive, &opts, &pool).await;
             // Stats are printed inside process_path()
         }

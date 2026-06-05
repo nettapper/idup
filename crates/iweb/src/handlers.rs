@@ -27,6 +27,7 @@ pub struct ScanForm {
     path: String,
     /// Present as "true" when the checkbox is checked; absent otherwise.
     recursive: Option<String>,
+    unzip: Option<String>,
     /// Preset: sha256 base + rotations, no flips, no phash
     exact: Option<String>,
     /// Preset: all hash variants
@@ -46,7 +47,7 @@ pub async fn scan(
     let path = PathBuf::from(&form.path);
     let recursive = form.recursive.is_some();
 
-    let opts = if form.all.is_some() {
+    let mut opts = if form.all.is_some() {
         idup::scan::ScanOptions::all()
     } else if form.exact.is_some() {
         idup::scan::ScanOptions::exact()
@@ -55,13 +56,16 @@ pub async fn scan(
             rotations: form.rotations.is_some(),
             flips: form.flips.is_some(),
             phash: form.phash.is_some(),
+            unzip: false,
         }
     };
+    opts.unzip = form.unzip.is_some();
 
     let stats = idup::scan::process_path(path, recursive, &opts, &pool).await;
 
     let mut notes: Vec<&str> = Vec::new();
     if recursive { notes.push("recursive"); }
+    if opts.unzip { notes.push("unzip"); }
     if opts.rotations { notes.push("rotations"); }
     if opts.flips { notes.push("flips"); }
     if opts.phash { notes.push("phash"); }
