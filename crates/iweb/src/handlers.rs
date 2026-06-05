@@ -28,6 +28,7 @@ pub struct ScanForm {
     /// Present as "true" when the checkbox is checked; absent otherwise.
     recursive: Option<String>,
     unzip: Option<String>,
+    remove_archive: Option<String>,
     /// Preset: sha256 base + rotations, no flips, no phash
     exact: Option<String>,
     /// Preset: all hash variants
@@ -57,15 +58,18 @@ pub async fn scan(
             flips: form.flips.is_some(),
             phash: form.phash.is_some(),
             unzip: false,
+            remove_archive: false,
         }
     };
     opts.unzip = form.unzip.is_some();
+    opts.remove_archive = form.remove_archive.is_some();
 
     let stats = idup::scan::process_path(path, recursive, &opts, &pool).await;
 
     let mut notes: Vec<&str> = Vec::new();
     if recursive { notes.push("recursive"); }
     if opts.unzip { notes.push("unzip"); }
+    if opts.remove_archive { notes.push("remove-archive"); }
     if opts.rotations { notes.push("rotations"); }
     if opts.flips { notes.push("flips"); }
     if opts.phash { notes.push("phash"); }

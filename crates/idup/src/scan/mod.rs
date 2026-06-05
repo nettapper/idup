@@ -29,6 +29,8 @@ pub struct ScanOptions {
     pub phash: bool,
     /// Unzip zip files and scan their contents
     pub unzip: bool,
+    /// Remove the zip archive after successful extraction
+    pub remove_archive: bool,
 }
 
 impl ScanOptions {
@@ -39,6 +41,7 @@ impl ScanOptions {
             flips: false,
             phash: false,
             unzip: false,
+            remove_archive: false,
         }
     }
 
@@ -49,6 +52,7 @@ impl ScanOptions {
             flips: false,
             phash: false,
             unzip: false,
+            remove_archive: false,
         }
     }
 
@@ -59,6 +63,7 @@ impl ScanOptions {
             flips: true,
             phash: true,
             unzip: false,
+            remove_archive: false,
         }
     }
 }
@@ -116,6 +121,12 @@ pub async fn process_path(path: PathBuf, recursive: bool, opts: &ScanOptions, po
             match unzip_file(&curr, &dest_dir) {
                 Ok(()) => {
                     stack.push(dest_dir);
+                    if opts.remove_archive {
+                        println!("Removing archive {:?}", curr);
+                        if let Err(err) = std::fs::remove_file(&curr) {
+                            println!("Failed to remove archive {:?}: {}", curr, err);
+                        }
+                    }
                 }
                 Err(err) => {
                     println!("Failed to unzip {:?}: {}", curr, err);

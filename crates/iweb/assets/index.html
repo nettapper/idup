@@ -39,8 +39,12 @@
         Recursive
       </label>
       <label class="checkbox-label">
-        <input type="checkbox" name="unzip" value="true" />
+        <input type="checkbox" name="unzip" value="true" id="scan-unzip" onchange="if (!this.checked) document.getElementById('scan-remove-archive').checked = false;" />
         Unzip zip files
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" name="remove_archive" value="true" id="scan-remove-archive" onchange="if (this.checked) document.getElementById('scan-unzip').checked = true;" />
+        Remove archive (requires Unzip)
       </label>
       <fieldset style="margin-top:0.75rem;border:1px solid var(--border,#333);padding:0.5rem 0.75rem;border-radius:4px">
         <legend style="font-size:0.8rem;padding:0 0.25rem">Hash variants</legend>
@@ -270,6 +274,10 @@
     if (params.get('unzip')) {
       const checkbox = document.querySelector(`#panel-${panel} input[name="unzip"]`);
       if (checkbox) checkbox.checked = params.get('unzip') === 'true';
+    }
+    if (params.get('remove_archive')) {
+      const checkbox = document.querySelector(`#panel-${panel} input[name="remove_archive"]`);
+      if (checkbox) checkbox.checked = params.get('remove_archive') === 'true';
     }
     // Clear the URL params (clean URL after applying)
     window.history.replaceState({}, '', '/');

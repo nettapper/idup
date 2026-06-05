@@ -37,6 +37,10 @@ enum Command {
         #[arg(long)]
         unzip: bool,
 
+        /// Remove the zip archive after successful extraction
+        #[arg(long, requires = "unzip")]
+        remove_archive: bool,
+
         // ── Presets ────────────────────────────────────────────────────────
 
         /// [Preset] SHA-256 base + rotations, no flips, no phash
@@ -134,7 +138,7 @@ async fn main() -> sqlx::Result<()> {
             }
         }
 
-        Command::Scan { path, recursive, unzip, exact, all, phash, rotations, flips } => {
+        Command::Scan { path, recursive, unzip, remove_archive, exact, all, phash, rotations, flips } => {
             let mut opts = if all {
                 scan::ScanOptions::all()
             } else if exact {
@@ -145,11 +149,13 @@ async fn main() -> sqlx::Result<()> {
                     flips,
                     phash,
                     unzip: false,
+                    remove_archive: false,
                 }
             } else {
                 scan::ScanOptions::default()
             };
             opts.unzip = unzip;
+            opts.remove_archive = remove_archive;
             scan::process_path(path, recursive, &opts, &pool).await;
             // Stats are printed inside process_path()
         }

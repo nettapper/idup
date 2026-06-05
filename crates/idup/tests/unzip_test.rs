@@ -154,3 +154,41 @@ fn scan_unzip_handles_single_root_dir() {
     assert!(direct_file.exists(), "expected file to be unzipped directly (without double nesting)");
     assert!(!nested_file.exists(), "should not be nested twice under the zip root folder");
 }
+
+#[test]
+fn scan_unzip_remove_archive_removes_file() {
+    let env = TestEnv::new();
+
+    // 1. Generate image bytes
+    let temp_dir = tempfile::tempdir().unwrap();
+    let img_a_path = image_gen::write_png(temp_dir.path(), "img_a.png", 101);
+    let mut img_a_bytes = Vec::new();
+    File::open(&img_a_path).unwrap().read_to_end(&mut img_a_bytes).unwrap();
+
+    // 2. Write zip file to env.img_dir
+    let zip_path = env.img_dir.join("images.zip");
+    create_zip_with_images(
+        &zip_path,
+        &[
+            ("img_a.png", img_a_bytes),
+        ],
+    )
+    .expect("failed to create test zip file");
+
+    assert!(zip_path.exists());
+
+    // 3. Run scan with --unzip and --remove-archive options
+    env.cmd()
+        .args(["scan", "--unzip", "--remove-archive", "--recursive", env.img_dir.to_str().unwrap()])
+        .assert()
+        .success();
+
+    // 4. Verify unzipped sibling directory exists
+    let expected_dir = env.img_dir.join("images");
+    assert!(expected_dir.exists(), "extracted sibling directory should exist");
+    assert!(expected_dir.is_dir());
+    assert!(expected_dir.join("img_a.png").exists());
+
+    // 5. Verify original zip file has been deleted
+    assert!(!zip_path.exists(), "original zip file should be deleted when --remove-archive is set");
+}
