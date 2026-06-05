@@ -10,4 +10,4 @@ When running performance tests, ensure that you're running the optimized build
 make relase
 ```
 
-31462 files scanned in 691.35s (45.51 imgs/sec) on my hardware.
+33312 files scanned in 529.36s (62.93 imgs/sec) on my hardware.
