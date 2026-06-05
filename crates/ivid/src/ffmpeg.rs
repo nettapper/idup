@@ -121,23 +121,67 @@ pub fn probe_fps(path: &Path) -> Result<f64, String> {
     }
 }
 
-/// Extract a single frame from a video at the given timestamp (in seconds).
-pub fn extract_frame(video: &Path, timestamp_secs: f64, output_path: &Path) -> Result<(), String> {
-    let result = Command::new("ffmpeg")
-        .args(["-y", "-loglevel", "error"])
-        .arg("-ss")
-        .arg(format!("{timestamp_secs:.3}"))
-        .arg("-i")
-        .arg(video)
-        .args(["-frames:v", "1"])
-        .arg(output_path)
-        .output()
-        .map_err(|e| format!("Failed to run ffmpeg: {e}"))?;
+/// Extract frames at a fixed FPS rate (time-based interval).
+/// fps_value = 1.0 / interval_secs (e.g., interval=2s -> fps=0.5)
+/// Command: ffmpeg -y -loglevel error [-ss start] [-to stop] -i video -vf "fps=<fps_value>" output_pattern
+pub fn extract_frames_by_time(
+    video: &Path,
+    output_pattern: &Path,
+    fps_value: f64,
+    start: Option<f64>,
+    stop: Option<f64>,
+) -> Result<(), String> {
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-y").args(["-loglevel", "error"]);
 
-    if !result.status.success() {
-        let stderr = String::from_utf8_lossy(&result.stderr);
-        return Err(format!("ffmpeg failed: {}", stderr.trim()));
+    if let Some(s) = start {
+        cmd.args(["-ss", &format!("{s:.3}")]);
+    }
+    if let Some(t) = stop {
+        cmd.args(["-to", &format!("{t:.3}")]);
     }
 
+    cmd.arg("-i").arg(video);
+    cmd.args(["-vf", &format!("fps={fps_value}")]);
+    cmd.arg(output_pattern);
+
+    let output = cmd.output().map_err(|e| format!("Failed to run ffmpeg: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("ffmpeg failed: {}", stderr.trim()));
+    }
     Ok(())
 }
+
+/// Extract every Nth frame (frame-based interval).
+/// Command: ffmpeg -y -loglevel error [-ss start] [-to stop] -i video -vf "select='not(mod(n\,<N>))'" -vsync vfr output_pattern
+pub fn extract_frames_by_frame_interval(
+    video: &Path,
+    output_pattern: &Path,
+    frame_interval: u64,
+    start: Option<f64>,
+    stop: Option<f64>,
+) -> Result<(), String> {
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-y").args(["-loglevel", "error"]);
+
+    if let Some(s) = start {
+        cmd.args(["-ss", &format!("{s:.3}")]);
+    }
+    if let Some(t) = stop {
+        cmd.args(["-to", &format!("{t:.3}")]);
+    }
+
+    cmd.arg("-i").arg(video);
+    cmd.args(["-vf", &format!("select='not(mod(n\\,{}))'", frame_interval)]);
+    cmd.args(["-vsync", "vfr"]);
+    cmd.arg(output_pattern);
+
+    let output = cmd.output().map_err(|e| format!("Failed to run ffmpeg: {e}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("ffmpeg failed: {}", stderr.trim()));
+    }
+    Ok(())
+}
+

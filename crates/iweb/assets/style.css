@@ -68,10 +68,13 @@ h2 {
 /* ── Forms ──────────────────────────────── */
 form { display: flex; flex-direction: column; gap: 0.75rem; max-width: 560px; }
 
+.form-row { display: flex; gap: 1rem; }
+.form-row > * { flex: 1; }
+
 label { font-size: 0.8rem; color: #94a3b8; display: flex; flex-direction: column; gap: 0.3rem; }
 label.checkbox-label { flex-direction: row; align-items: center; gap: 0.5rem; color: #cbd5e1; cursor: pointer; }
 
-input[type="text"] {
+input[type="text"], input[type="number"], select {
   background: #1a1d27;
   border: 1px solid #2d3148;
   border-radius: 6px;
@@ -82,8 +85,8 @@ input[type="text"] {
   outline: none;
   transition: border-color 0.15s;
 }
-input[type="text"]:focus { border-color: #7c6af7; }
-input[type="text"]::placeholder { color: #4a5568; }
+input[type="text"]:focus, input[type="number"]:focus, select:focus { border-color: #7c6af7; }
+input[type="text"]::placeholder, input[type="number"]::placeholder { color: #4a5568; }
 
 input[type="checkbox"] { accent-color: #7c6af7; width: 1rem; height: 1rem; cursor: pointer; }
 

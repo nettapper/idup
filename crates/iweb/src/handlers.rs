@@ -83,6 +83,106 @@ pub async fn scan(
     ))
 }
 
+// ── Extract ───────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct ExtractForm {
+    video: String,
+    interval: Option<f64>,
+    interval_mode: Option<String>,
+    start: Option<String>,
+    stop: Option<String>,
+    output: Option<String>,
+    mkdir: Option<String>,
+    force: Option<String>,
+}
+
+pub async fn extract(Form(form): Form<ExtractForm>) -> Html<String> {
+    let video_path = PathBuf::from(form.video.trim());
+    if form.video.trim().is_empty() {
+        return Html(err_html("Video file path is required"));
+    }
+
+    let interval = form.interval.unwrap_or(1.0);
+    if interval <= 0.0 {
+        return Html(err_html("Interval must be greater than 0"));
+    }
+
+    let interval_mode = match form.interval_mode.as_deref() {
+        Some("frame") => ivid::extract::IntervalMode::Frame,
+        _ => ivid::extract::IntervalMode::Time,
+    };
+
+    let start_secs = if let Some(ref s) = form.start.filter(|s| !s.trim().is_empty()) {
+        match ivid::time::parse_hhmmss(s) {
+            Ok(secs) => Some(secs),
+            Err(e) => return Html(err_html(&format!("Invalid start time: {e}"))),
+        }
+    } else {
+        None
+    };
+
+    let stop_secs = if let Some(ref s) = form.stop.filter(|s| !s.trim().is_empty()) {
+        match ivid::time::parse_hhmmss(s) {
+            Ok(secs) => Some(secs),
+            Err(e) => return Html(err_html(&format!("Invalid stop time: {e}"))),
+        }
+    } else {
+        None
+    };
+
+    let video_stem = video_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("video");
+
+    let output_dir = if let Some(ref out) = form.output.filter(|o| !o.trim().is_empty()) {
+        PathBuf::from(out.trim())
+    } else {
+        PathBuf::from(format!("ivid_{video_stem}"))
+    };
+
+    let mkdir = form.mkdir.is_some();
+    let force = form.force.is_some();
+
+    let config = ivid::extract::ExtractConfig {
+        video: video_path,
+        output_dir,
+        interval,
+        interval_mode,
+        start: start_secs,
+        stop: stop_secs,
+        force,
+        mkdir,
+    };
+
+    match tokio::task::spawn_blocking(move || ivid::extract::run_extraction(&config)).await {
+        Ok(Ok(result)) => {
+            let output_dir_str = result.output_dir.to_string_lossy().into_owned();
+            let encoded_path = url_encode(&output_dir_str);
+            
+            Html(format!(
+                r#"<div class="result-success">
+                    Extraction complete
+                    <p class="muted" style="font-size:0.85rem;margin:1rem 0">
+                        {} frames extracted in {:.2}s<br>
+                        Output: <code>{}</code>
+                    </p>
+                    <a class="view-btn" href="/?panel=scan&path={}&recursive=true" style="display:inline-block;text-decoration:none">
+                        Scan these frames
+                    </a>
+                </div>"#,
+                result.frame_count,
+                result.elapsed_secs,
+                esc(&output_dir_str),
+                encoded_path,
+            ))
+        }
+        Ok(Err(e)) => Html(err_html(&e)),
+        Err(e) => Html(err_html(&format!("Internal task execution error: {e}"))),
+    }
+}
+
 // ── Update ────────────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]

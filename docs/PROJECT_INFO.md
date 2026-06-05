@@ -70,13 +70,14 @@ idup/                      # Workspace root
 │   │   └── src/
 │   │       └── main.rs    # Standalone image generation utility
 │   │
-│   └── ivid/              # Video frame extractor CLI
-│       ├── Cargo.toml     # ivid crate manifest (minimal deps: just `clap`)
+│   └── ivid/              # Video frame extractor CLI and library
+│       ├── Cargo.toml     # ivid crate manifest (defines lib and bin targets)
 │       └── src/
+│           ├── lib.rs     # Library root — re-exports extract, ffmpeg, time
 │           ├── main.rs    # CLI entry point, arg parsing, validation, orchestration
 │           ├── ffmpeg.rs  # ffmpeg/ffprobe subprocess wrappers
-│           ├── extract.rs # Frame extraction logic (time + frame modes)
-│           └── time.rs    # HH:MM:SS parsing and timestamp formatting utilities
+│           ├── extract.rs # Frame extraction logic (single-command time + frame modes)
+│           └── time.rs    # HH:MM:SS parsing utilities
 ```
 
 ---
@@ -157,6 +158,7 @@ Routes:
 | `GET /` | `index` | Main SPA (index.html) |
 | `GET /style.css` | `style` | Shared stylesheet |
 | `POST /api/scan` | `scan` | Run a scan and return result fragment |
+| `POST /api/extract` | `extract` | Run frame extraction and return result fragment |
 | `POST /api/update` | `update` | Run an update and return result fragment |
 | `GET /api/list` | `list` | List duplicate groups (htmx fragment); group headers link to `/explore?hash=` |
 | `GET /api/info` | `info` | pHash + SHA-256 for a single file |
@@ -205,8 +207,10 @@ ivid <VIDEO> [OPTIONS]
 
 ## Web UI Features
 
-The `iweb` binary starts a local HTTP server. The UI has panels for each CLI operation (scan, list, info, random, explore) plus image viewing:
+The `iweb` binary starts a local HTTP server. The UI has panels for each CLI operation (scan, video, list, info, random, explore) plus image viewing:
 
+- **Scan panel**: Enter a directory path and options to scan images into the database.
+- **Video panel**: Extract frames from a video file using ivid. Displays a "Scan these frames" button which navigates to the scan panel with parameters pre-filled.
 - **List panel**: Each duplicate group header is a clickable link that opens `/explore?hash=<hash>` in a new browser tab.
 - **Random panel**: After fetching results, a "View All in Browser" button links to `/explore?seed=<seed>&n=<n>&filter=<filter>`, allowing deterministic replay of the exact same random selection.
 - **Clean panel**: Wipes the entire database. A browser `confirm()` dialog (via htmx `hx-confirm`) prompts the user before the request is sent.
@@ -218,6 +222,7 @@ The `iweb` binary starts a local HTTP server. The UI has panels for each CLI ope
   - `?seed=<u64>&n=<u32>&filter=<glob>` — deterministic random N images (used by the random panel)
   - The page always shows a filter bar (dir + glob inputs) for in-page navigation without returning to the SPA.
 - **Image serving** (`/api/image`): Serves local image files by absolute path. Access is gated: only paths tracked in the idup DB are served.
+- **Deep-linking and panel state**: The UI supports deep-linking via query parameters (e.g. `/?panel=scan&path=/some/dir&recursive=true`), automatically pre-filling the inputs and switching tabs on page load.
 
 ---
 
@@ -236,8 +241,9 @@ The `iweb` binary starts a local HTTP server. The UI has panels for each CLI ope
 - **Web image serving is DB-gated**: `/api/image` only serves files whose absolute path is already tracked in the idup database. This prevents arbitrary file system access.
 - **Explore page is server-rendered**: The `/explore` handler builds the full HTML string in Rust (no template engine). Paths are embedded directly into `<img src="/api/image?path=...">` tags with percent-encoded URLs.
 - **No external services**: Entirely self-contained. The web UI loads htmx from a CDN but otherwise requires no network access.
-- **ivid shells out to ffmpeg**: The `ivid` crate uses `std::process::Command` to invoke `ffmpeg` (frame extraction) and `ffprobe` (video probing for duration and fps). No Rust video decoding libraries are used. ffmpeg availability is validated at startup.
-- **ivid supports two interval modes**: Time-based (default, in seconds) and frame-based (in frames). Sub-second intervals automatically switch filenames to include a millisecond component (e.g. `00h01m30s500ms`).
+- **ivid shells out to ffmpeg**: The `ivid` crate uses `std::process::Command` to invoke `ffmpeg` (frame extraction) and `ffprobe` (video probing for duration). No Rust video decoding libraries are used. ffmpeg availability is validated at startup.
+- **ivid supports two interval modes**: Time-based (default, in seconds) and frame-based (in frames). Extraction is performed via a single ffmpeg command with filter graphs (`fps` or `select`) rather than calling ffmpeg once per frame. Files are named sequentially (e.g. `myvideo_0001.png`).
+- **lib+bin pattern for ivid**: `ivid` is structured as a lib+bin crate, allowing `iweb` to depend on its core extraction engine as a library, while maintaining the standalone `ivid` CLI.
 
 ---
 

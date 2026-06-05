@@ -5,5 +5,14 @@ authors.workspace = true
 edition.workspace = true
 publish = false
 
+[lib]
+name = "ivid"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ivid"
+path = "src/main.rs"
+
 [dependencies]
 clap = { version = "4.6.1", features = ["derive"] }
+

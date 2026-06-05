@@ -33,6 +33,7 @@ async fn serve(port: u16, open_browser: bool, pool: sqlx::SqlitePool) {
         .route("/", get(handlers::index))
         .route("/style.css", get(handlers::style))
         .route("/api/scan", post(handlers::scan))
+        .route("/api/extract", post(handlers::extract))
         .route("/api/update", post(handlers::update))
         .route("/api/clean", post(handlers::clean))
         .route("/api/list", get(handlers::list))

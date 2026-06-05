@@ -12,6 +12,7 @@
 <nav>
   <div class="logo">idup</div>
   <a href="#" class="active" data-panel="scan">scan</a>
+  <a href="#" data-panel="video">video</a>
   <a href="#" data-panel="update">update</a>
   <a href="#" data-panel="list">list</a>
   <a href="#" data-panel="info">info</a>
@@ -69,6 +70,58 @@
     </form>
     <span id="scan-spinner" class="htmx-indicator">scanning…</span>
     <div id="scan-result" class="result-box"></div>
+  </section>
+
+  <!-- Video -->
+  <section id="panel-video" class="panel">
+    <h2>Video Frame Extraction</h2>
+    <p class="muted" style="margin-bottom:1rem">Extract screenshots from a video file at configurable intervals.</p>
+    <form hx-post="/api/extract" hx-target="#video-result" hx-swap="innerHTML" hx-indicator="#video-spinner">
+      <label>
+        Video file
+        <input type="text" name="video" placeholder="/home/user/video.mp4" required />
+      </label>
+      <div class="form-row">
+        <label>
+          Interval
+          <input type="number" name="interval" value="1" step="any" min="0.001" required />
+        </label>
+        <label>
+          Mode
+          <select name="interval_mode">
+            <option value="time">Seconds</option>
+            <option value="frame">Frames</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-row">
+        <label>
+          Start time <span class="muted" style="font-size:0.8em">(optional, HH:MM:SS)</span>
+          <input type="text" name="start" placeholder="00:00:00" />
+        </label>
+        <label>
+          Stop time <span class="muted" style="font-size:0.8em">(optional, HH:MM:SS)</span>
+          <input type="text" name="stop" placeholder="00:05:30" />
+        </label>
+      </div>
+      <label>
+        Output dir <span class="muted" style="font-size:0.8em">(optional)</span>
+        <input type="text" name="output" placeholder="/home/user/Photos/extracted" />
+      </label>
+      <div class="form-row checkbox-row" style="gap:1.5rem;margin-top:0.5rem">
+        <label class="checkbox-label">
+          <input type="checkbox" name="mkdir" value="true" checked />
+          Create dir
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" name="force" value="true" />
+          Force overwrite
+        </label>
+      </div>
+      <button type="submit" style="margin-top:0.75rem">Extract Frames</button>
+    </form>
+    <span id="video-spinner" class="htmx-indicator">extracting…</span>
+    <div id="video-result" class="result-box"></div>
   </section>
 
   <!-- Update -->
@@ -176,16 +229,43 @@
   const links = document.querySelectorAll('nav a[data-panel]');
   const panels = document.querySelectorAll('.panel');
 
+  function switchToPanel(panelId) {
+    const link = document.querySelector(`nav a[data-panel="${panelId}"]`);
+    const panel = document.getElementById('panel-' + panelId);
+    if (link && panel) {
+      links.forEach(l => l.classList.remove('active'));
+      panels.forEach(p => p.classList.remove('active'));
+      link.classList.add('active');
+      panel.classList.add('active');
+    }
+  }
+
   links.forEach(link => {
     link.addEventListener('click', e => {
       e.preventDefault();
       const target = link.dataset.panel;
-      links.forEach(l => l.classList.remove('active'));
-      panels.forEach(p => p.classList.remove('active'));
-      link.classList.add('active');
-      document.getElementById('panel-' + target).classList.add('active');
+      switchToPanel(target);
     });
   });
+
+  // On page load, check for ?panel=...&path=...&recursive=...
+  const params = new URLSearchParams(window.location.search);
+  const panel = params.get('panel');
+  if (panel) {
+    // Switch to the requested panel
+    switchToPanel(panel);
+    // Pre-fill form fields from remaining query params
+    if (params.get('path')) {
+      const input = document.querySelector(`#panel-${panel} input[name="path"]`);
+      if (input) input.value = params.get('path');
+    }
+    if (params.get('recursive')) {
+      const checkbox = document.querySelector(`#panel-${panel} input[name="recursive"]`);
+      if (checkbox) checkbox.checked = params.get('recursive') === 'true';
+    }
+    // Clear the URL params (clean URL after applying)
+    window.history.replaceState({}, '', '/');
+  }
 </script>
 </body>
 </html>

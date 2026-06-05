@@ -1,19 +1,11 @@
 use std::path::PathBuf;
 use std::process;
 
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 
-mod extract;
-mod ffmpeg;
-mod time;
+use ivid::extract::{ExtractConfig, IntervalMode, run_extraction};
+use ivid::time;
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
-enum IntervalMode {
-    /// Interval is in seconds (default)
-    Time,
-    /// Interval is in frames
-    Frame,
-}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -65,66 +57,6 @@ fn main() {
 }
 
 fn run(cli: Cli) -> Result<(), String> {
-    // --- 1. Check ffmpeg/ffprobe availability ---
-    ffmpeg::check_ffmpeg()?;
-    ffmpeg::check_ffprobe()?;
-
-    // --- 2. Validate input file ---
-    if !cli.video.exists() {
-        return Err(format!(
-            "Video file not found: {}",
-            cli.video.display()
-        ));
-    }
-
-    // --- 3. Validate interval ---
-    if cli.interval <= 0.0 {
-        return Err("--interval must be greater than 0".to_string());
-    }
-
-    // --- 4. Probe video metadata ---
-    let duration = ffmpeg::probe_duration(&cli.video)?;
-    let fps = ffmpeg::probe_fps(&cli.video)?;
-
-    println!(
-        "[ivid] Video: {} ({}, {fps:.2} fps)",
-        cli.video.display(),
-        time::format_hhmmss(duration),
-    );
-
-    // --- 5. Parse and validate start/stop ---
-    let start_secs = match &cli.start {
-        Some(s) => time::parse_hhmmss(s)?,
-        None => 0.0,
-    };
-    let stop_secs = match &cli.stop {
-        Some(s) => time::parse_hhmmss(s)?,
-        None => duration,
-    };
-
-    if start_secs >= stop_secs {
-        return Err(format!(
-            "--start ({}) must be before --stop ({})",
-            time::format_hhmmss(start_secs),
-            time::format_hhmmss(stop_secs),
-        ));
-    }
-    if start_secs >= duration {
-        return Err(format!(
-            "--start ({}) is at or past video duration ({})",
-            time::format_hhmmss(start_secs),
-            time::format_hhmmss(duration),
-        ));
-    }
-    if cli.stop.is_some() && stop_secs > duration {
-        return Err(format!(
-            "--stop ({}) exceeds video duration ({})",
-            time::format_hhmmss(stop_secs),
-            time::format_hhmmss(duration),
-        ));
-    }
-
-    // --- 6. Determine output directory ---
     let video_stem = cli
         .video
         .file_stem()
@@ -136,72 +68,47 @@ fn run(cli: Cli) -> Result<(), String> {
         .output
         .unwrap_or_else(|| PathBuf::from(format!("ivid_{video_stem}")));
 
-    // --- 7. Handle output directory existence ---
-    // The default directory (ivid_<stem>) is always auto-created.
-    // A user-specified --output directory requires --mkdir to be created.
-    if !output_dir.exists() {
-        if !user_specified_output || cli.mkdir {
-            std::fs::create_dir_all(&output_dir)
-                .map_err(|e| format!("Failed to create output directory: {e}"))?;
-        } else {
-            return Err(format!(
-                "Output directory does not exist: {}. Use --mkdir to create it.",
-                output_dir.display()
-            ));
-        }
-    }
-
-    // --- 8. Determine if interval is sub-second ---
-    let sub_second = match cli.interval_mode {
-        IntervalMode::Time => cli.interval.fract() != 0.0,
-        IntervalMode::Frame => {
-            // In frame mode, sub-second depends on whether frame interval
-            // produces sub-second timestamps (it usually does)
-            let interval_secs = cli.interval / fps;
-            interval_secs.fract() != 0.0
-        }
+    let start_secs = match &cli.start {
+        Some(s) => Some(time::parse_hhmmss(s)?),
+        None => None,
+    };
+    let stop_secs = match &cli.stop {
+        Some(s) => Some(time::parse_hhmmss(s)?),
+        None => None,
     };
 
-    // --- 9. Compute extraction timestamps ---
-    let timestamps = match cli.interval_mode {
-        IntervalMode::Time => {
-            extract::compute_timestamps_time(start_secs, stop_secs, cli.interval)
-        }
-        IntervalMode::Frame => {
-            extract::compute_timestamps_frame(start_secs, stop_secs, cli.interval, fps)
-        }
+    // For CLI, default output directory (ivid_<video_stem>) is always auto-created (mkdir = true).
+    // User-specified output requires either mkdir flag or output_dir to already exist.
+    let mkdir = if !user_specified_output {
+        true
+    } else {
+        cli.mkdir
     };
 
-    // --- 10. Check for existing files (unless --force) ---
-    if !cli.force {
-        let existing: Vec<_> = timestamps
-            .iter()
-            .map(|&t| extract::output_filename(video_stem, t, sub_second))
-            .map(|name| output_dir.join(name))
-            .filter(|p| p.exists())
-            .collect();
-
-        if !existing.is_empty() {
-            return Err(format!(
-                "{} output file(s) already exist in {}. Use --force to overwrite.",
-                existing.len(),
-                output_dir.display()
-            ));
-        }
-    }
-
-    // --- 11. Extract frames ---
-    let config = extract::ExtractConfig {
-        video: &cli.video,
-        output_dir: &output_dir,
-        video_stem,
-        timestamps: &timestamps,
-        sub_second,
-        start_secs,
-        stop_secs,
+    let config = ExtractConfig {
+        video: cli.video,
+        output_dir,
+        interval: cli.interval,
+        interval_mode: cli.interval_mode,
+        start: start_secs,
+        stop: stop_secs,
+        force: cli.force,
+        mkdir,
     };
 
-    extract::run_extraction(config)?;
+    println!(
+        "[ivid] Extracting frames from {}...",
+        config.video.display()
+    );
+
+    let result = run_extraction(&config)?;
+
+    println!(
+        "[ivid] Done. {} frames extracted in {:.1}s.",
+        result.frame_count,
+        result.elapsed_secs
+    );
+    println!("[ivid] Output directory: {}", result.output_dir.display());
 
     Ok(())
 }

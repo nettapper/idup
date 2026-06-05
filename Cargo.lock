@@ -1248,6 +1248,7 @@ dependencies = [
  "clap",
  "idup",
  "infer",
+ "ivid",
  "open",
  "serde",
  "sqlx",
