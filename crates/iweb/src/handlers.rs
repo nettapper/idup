@@ -926,7 +926,7 @@ const EXPLORE_CSS: &str = r#"
     }
     .modal-img-area img {
       max-width: 100%;
-      max-height: 100%;
+      max-height: calc(92vh - 120px);
       object-fit: contain;
       display: block;
     }
