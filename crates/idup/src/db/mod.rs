@@ -95,12 +95,8 @@ pub async fn save(pool: &SqlitePool, img: &ImgHash) -> Result<(), sqlx::Error> {
             query("INSERT INTO images (path) VALUES (?)")
                 .bind(&path)
                 .execute(&mut *conn)
-                .await?;
-
-            sqlx::query_scalar::<_, i64>("SELECT images_id FROM images WHERE path = ?")
-                .bind(&path)
-                .fetch_one(&mut *conn)
                 .await?
+                .last_insert_rowid()
         }
     };
 
@@ -153,12 +149,8 @@ pub async fn save_image_hashes(
             query("INSERT INTO images (path) VALUES (?)")
                 .bind(&path_str)
                 .execute(&mut *tx)
-                .await?;
-
-            sqlx::query_scalar::<_, i64>("SELECT images_id FROM images WHERE path = ?")
-                .bind(&path_str)
-                .fetch_one(&mut *tx)
                 .await?
+                .last_insert_rowid()
         }
     };
 
@@ -495,11 +487,33 @@ async fn existing_image_id(conn: &mut SqliteConnection, path: &str) -> Result<Op
         .map(|row| row.map(|r| r.0))
 }
 
+fn clean_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut clean = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                clean.pop();
+            }
+            Component::CurDir => {}
+            _ => {
+                clean.push(component);
+            }
+        }
+    }
+    clean
+}
+
 fn normalize_path(path: &Path) -> String {
-    path.canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf())
-        .to_string_lossy()
-        .to_string()
+    let abs_path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
+    };
+
+    clean_path(&abs_path).to_string_lossy().to_string()
 }
 
 async fn save_partial_phash(
@@ -693,6 +707,48 @@ mod tests {
         .await?;
 
         assert_eq!(latest_hash, "33333333");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_normalize_path_deleted_file() -> sqlx::Result<()> {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await?;
+
+        setup_db(&pool).await?;
+
+        // Create a temporary file and save its hash
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_image.jpg");
+        std::fs::File::create(&file_path).unwrap();
+
+        let hash = ImgHash {
+            path: file_path.clone(),
+            kind: ImgHashKind::Sha256("imgdata".to_string()),
+            hash: "11112222".to_string(),
+        };
+
+        save(&pool, &hash).await?;
+
+        // Verify it was saved
+        let count_before: i64 = query_scalar("SELECT COUNT(*) FROM images").fetch_one(&pool).await?;
+        assert_eq!(count_before, 1);
+
+        // Delete the file from disk so canonicalization will fail
+        std::fs::remove_file(&file_path).unwrap();
+
+        // Create a relative path version pointing to the same location
+        let relative_path = temp_dir.path().join("sub/../test_image.jpg");
+
+        // Try to clear hashes using the relative path of the deleted file
+        clear_hashes_for_path(&pool, &relative_path).await?;
+
+        // Check if hashes were cleared. If it failed to normalize/match, the count will still be 1 (hashes not deleted).
+        let hash_count: i64 = query_scalar("SELECT COUNT(*) FROM hashes").fetch_one(&pool).await?;
+        assert_eq!(hash_count, 0); // This will fail because relative_path fails to canonicalize to the same string!
 
         Ok(())
     }
