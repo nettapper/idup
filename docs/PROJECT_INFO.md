@@ -29,7 +29,7 @@ The name is short for **image duplicates**.
 
 ## Project Structure
 
-Workspace with three crates:
+Workspace with four crates:
 
 ```
 idup/                      # Workspace root
@@ -39,12 +39,10 @@ idup/                      # Workspace root
 ├── docs/
 │   └── PROJECT_INFO.md    # This file
 ├── crates/
-│   ├── idup/              # Main CLI binary
+│   ├── idup/              # Core library + CLI binary (lib+bin crate)
 │   │   ├── Cargo.toml     # idup crate manifest
-│   │   ├── assets/
-│   │   │   ├── index.html # Main web UI (SPA using htmx)
-│   │   │   └── style.css  # Shared stylesheet for web UI
 │   │   └── src/
+│   │       ├── lib.rs     # Library root — re-exports db, hash, scan, update
 │   │       ├── main.rs    # CLI entry point and command dispatch
 │   │       ├── db/
 │   │       │   └── mod.rs # Database layer (SQLite via sqlx)
@@ -55,11 +53,17 @@ idup/                      # Workspace root
 │   │       │   └── sha256.rs # Hand-rolled SHA-256 (optional exact-hash impl, kept for reference)
 │   │       ├── scan/
 │   │       │   └── mod.rs # Filesystem traversal and hashing orchestration
-│   │       ├── update/
-│   │       │   └── mod.rs # Image hash validation and refresh
-│   │       └── web/
-│   │           ├── mod.rs # Axum router setup and server startup
-│   │           └── handlers.rs # HTTP handlers for all routes
+│   │       └── update/
+│   │           └── mod.rs # Image hash validation and refresh
+│   │
+│   ├── iweb/              # Standalone web UI binary (depends on idup as a library)
+│   │   ├── Cargo.toml     # iweb crate manifest
+│   │   ├── assets/
+│   │   │   ├── index.html # Main web UI (SPA using htmx)
+│   │   │   └── style.css  # Shared stylesheet for web UI
+│   │   └── src/
+│   │       ├── main.rs    # CLI entry point, Axum router setup, server startup
+│   │       └── handlers.rs # HTTP handlers for all routes
 │   │
 │   ├── igen/              # Performance test image generator
 │   │   ├── Cargo.toml     # igen crate manifest (minimal deps: just `image`)
@@ -79,8 +83,11 @@ idup/                      # Workspace root
 
 ## Key Modules
 
+### `src/lib.rs`
+Library root for the `idup` crate. Re-exports `db`, `hash`, `scan`, and `update` as public modules so that other crates (e.g. `iweb`) can depend on `idup` as a library.
+
 ### `src/main.rs`
-Defines `Cli` and `Command` via clap derive macros. Opens the SQLite connection pool and dispatches to the appropriate logic per subcommand. `Clean` and `Update` commands are currently stubs.
+Defines `Cli` and `Command` via clap derive macros. Imports shared modules via `use idup::{db, hash, scan, update}`. Opens the SQLite connection pool and dispatches to the appropriate logic per subcommand.
 
 ### `src/scan/mod.rs`
 `process_path(path, recursive, pool)` — iterates files using explicit stack-based DFS. Uses `infer` to detect images by magic bytes (not file extension). For each image:
@@ -140,8 +147,8 @@ Key public functions:
 
 DB location: `$XDG_DATA_HOME/idup/idup.db3` (defaults to `~/.local/share/idup/idup.db3`). Created automatically on first run. Includes an in-band schema migration to fix the `hashes` primary key (recreates as `hashes_v2` if old schema detected).
 
-### `src/web/mod.rs` and `src/web/handlers.rs`
-Axum-based web server started by `idup web`. Serves a single-page UI (`assets/index.html`) that uses htmx to call JSON/HTML fragment endpoints. Also serves a standalone explore page for browsing and viewing images.
+### `iweb` crate — `src/main.rs` and `src/handlers.rs`
+Standalone Axum-based web server binary. Depends on `idup` as a library for all database, hashing, scanning, and update logic. Serves a single-page UI (`assets/index.html`) that uses htmx to call JSON/HTML fragment endpoints. Also serves a standalone explore page for browsing and viewing images.
 
 Routes:
 
@@ -150,6 +157,7 @@ Routes:
 | `GET /` | `index` | Main SPA (index.html) |
 | `GET /style.css` | `style` | Shared stylesheet |
 | `POST /api/scan` | `scan` | Run a scan and return result fragment |
+| `POST /api/update` | `update` | Run an update and return result fragment |
 | `GET /api/list` | `list` | List duplicate groups (htmx fragment); group headers link to `/explore?hash=` |
 | `GET /api/info` | `info` | pHash + SHA-256 for a single file |
 | `GET /api/random` | `random` | N seeded-random paths; includes "View All in Browser" button linking to `/explore` |
@@ -167,10 +175,15 @@ idup list [<path>]               # List all exact duplicates (optionally for a s
 idup random [N]                  # Return N random files from the db (default: 20)
 idup info <file>                 # Print phash + sha256 of a single file
 idup compare <img1> <img2>       # Print phash of both images and their Hamming distance
-idup web [--port N] [--open]     # Start the web UI (default port: 3000)
 idup stats                        # Print database statistics (image count, hash counts by type)
-idup clean                       # (stub) Remove outdated DB entries
+idup clean                       # Wipe entire database (with confirmation prompt)
 idup update [PATH] [--cleanup]   # Validate and refresh image hashes in the DB
+```
+
+### `iweb` CLI
+
+```
+iweb [--port N] [--open]         # Start the web UI (default port: 3000)
 ```
 
 ### `ivid` CLI
@@ -192,7 +205,7 @@ ivid <VIDEO> [OPTIONS]
 
 ## Web UI Features
 
-The `idup web` command starts a local HTTP server. The UI has panels for each CLI operation (scan, list, info, random, explore) plus image viewing:
+The `iweb` binary starts a local HTTP server. The UI has panels for each CLI operation (scan, list, info, random, explore) plus image viewing:
 
 - **List panel**: Each duplicate group header is a clickable link that opens `/explore?hash=<hash>` in a new browser tab.
 - **Random panel**: After fetching results, a "View All in Browser" button links to `/explore?seed=<seed>&n=<n>&filter=<filter>`, allowing deterministic replay of the exact same random selection.
@@ -219,8 +232,9 @@ The `idup web` command starts a local HTTP server. The UI has panels for each CL
 - **Partial hash table**: `partial_hashes` splits pHash into 4-byte chunks with sequence numbers, laying groundwork for indexed fuzzy lookup (not yet surfaced in the CLI).
 - **Stack-based DFS traversal**: Avoids recursion-related stack overflows on deep directory trees.
 - **Schema migration inline**: No migration framework; schema setup and the `hashes` PK fix are handled in `setup_db()` at startup.
+- **lib+bin crate pattern**: `idup` is structured as a lib+bin crate. `lib.rs` re-exports `db`, `hash`, `scan`, and `update` as public modules. The binary (`main.rs`) imports these via `use idup::{...}`. The `iweb` crate depends on `idup` as a library to access the same shared logic.
 - **Web image serving is DB-gated**: `/api/image` only serves files whose absolute path is already tracked in the idup database. This prevents arbitrary file system access.
-- **Gallery page is server-rendered**: The `/gallery` handler builds the full HTML string in Rust (no template engine). Paths are embedded directly into `<img src="/api/image?path=...">` tags with percent-encoded URLs.
+- **Explore page is server-rendered**: The `/explore` handler builds the full HTML string in Rust (no template engine). Paths are embedded directly into `<img src="/api/image?path=...">` tags with percent-encoded URLs.
 - **No external services**: Entirely self-contained. The web UI loads htmx from a CDN but otherwise requires no network access.
 - **ivid shells out to ffmpeg**: The `ivid` crate uses `std::process::Command` to invoke `ffmpeg` (frame extraction) and `ffprobe` (video probing for duration and fps). No Rust video decoding libraries are used. ffmpeg availability is validated at startup.
 - **ivid supports two interval modes**: Time-based (default, in seconds) and frame-based (in frames). Sub-second intervals automatically switch filenames to include a millisecond component (e.g. `00h01m30s500ms`).
@@ -254,6 +268,7 @@ cargo build --no-default-features --features "xxh3,sha256"  # both simultaneousl
 
 # Build specific binaries
 cargo build --bin idup
+cargo build --bin iweb
 cargo build --bin igen
 
 # Run tests (from workspace root)
@@ -267,6 +282,7 @@ cargo test --bins --no-default-features --features "xxh3,sha256"  # both
 
 # Run commands directly
 cargo run --bin idup -- <cmd>      # Run idup CLI
+cargo run --bin iweb -- --port 8080 --open  # Run web UI
 cargo run --bin igen -- --dir <path> --count <n> --dupe-pct <pct>
 ```
 

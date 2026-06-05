@@ -10,13 +10,13 @@ use std::path::{Path, PathBuf};
 // ── Static assets ─────────────────────────────────────────────────────────────
 
 pub async fn index() -> Html<&'static str> {
-    Html(include_str!("../../assets/index.html"))
+    Html(include_str!("../assets/index.html"))
 }
 
 pub async fn style() -> impl axum::response::IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "text/css")],
-        include_str!("../../assets/style.css"),
+        include_str!("../assets/style.css"),
     )
 }
 
@@ -47,18 +47,18 @@ pub async fn scan(
     let recursive = form.recursive.is_some();
 
     let opts = if form.all.is_some() {
-        crate::scan::ScanOptions::all()
+        idup::scan::ScanOptions::all()
     } else if form.exact.is_some() {
-        crate::scan::ScanOptions::exact()
+        idup::scan::ScanOptions::exact()
     } else {
-        crate::scan::ScanOptions {
+        idup::scan::ScanOptions {
             rotations: form.rotations.is_some(),
             flips: form.flips.is_some(),
             phash: form.phash.is_some(),
         }
     };
 
-    let stats = crate::scan::process_path(path, recursive, &opts, &pool).await;
+    let stats = idup::scan::process_path(path, recursive, &opts, &pool).await;
 
     let mut notes: Vec<&str> = Vec::new();
     if recursive { notes.push("recursive"); }
@@ -99,7 +99,7 @@ pub async fn update(
     let path = form.path.filter(|p| !p.trim().is_empty()).map(PathBuf::from);
     let cleanup = form.cleanup.is_some();
 
-    let stats = crate::update::process_update(path, cleanup, &pool).await;
+    let stats = idup::update::process_update(path, cleanup, &pool).await;
 
     // Build result HTML with formatted statistics
     let cleaned_row = if cleanup {
@@ -138,7 +138,7 @@ pub async fn update(
 // ── Clean ─────────────────────────────────────────────────────────────────────
 
 pub async fn clean(State(pool): State<SqlitePool>) -> Html<String> {
-    match crate::db::wipe_db(&pool).await {
+    match idup::db::wipe_db(&pool).await {
         Ok(()) => Html(
             r#"<div class="result-success">Database wiped. All images and hashes have been deleted.</div>"#
                 .to_string(),
@@ -162,7 +162,7 @@ pub async fn list(
     let path = params.path.filter(|p| !p.trim().is_empty());
 
     match path {
-        None => match crate::db::exact_matches_grouped(&pool).await {
+        None => match idup::db::exact_matches_grouped(&pool).await {
             Err(e) => Html(err_html(&e.to_string())),
             Ok(data) if data.is_empty() => {
                 Html(r#"<p class="muted">No duplicates found.</p>"#.to_string())
@@ -211,7 +211,7 @@ pub async fn list(
 
         Some(path_str) => {
             let path = PathBuf::from(&path_str);
-            match crate::db::exact_match(&pool, &path).await {
+            match idup::db::exact_match(&pool, &path).await {
                 Err(e) => Html(err_html(&e.to_string())),
                 Ok(data) if data.is_empty() => {
                     Html(r#"<p class="muted">No duplicates found.</p>"#.to_string())
@@ -244,7 +244,7 @@ pub async fn info(Query(params): Query<InfoQuery>) -> Html<String> {
     let path = PathBuf::from(&params.file);
     let mut html = String::from(r#"<div class="info-result">"#);
 
-    match crate::hash::phash::hash_path(&path) {
+    match idup::hash::phash::hash_path(&path) {
         Ok(ph) => html.push_str(&format!(
             "<p><strong>pHash:</strong> <code>{}</code></p>",
             esc(&ph.hash)
@@ -255,7 +255,7 @@ pub async fn info(Query(params): Query<InfoQuery>) -> Html<String> {
         )),
     }
 
-    match crate::hash::sha256::hash_path(&path) {
+    match idup::hash::sha256::hash_path(&path) {
         Ok(sh) => html.push_str(&format!(
             "<p><strong>SHA-256:</strong> <code>{}</code></p>",
             esc(&sh.hash)
@@ -291,7 +291,7 @@ pub async fn random(
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(42);
 
-    match crate::db::random_images_seeded(&pool, n, filter, seed).await {
+    match idup::db::random_images_seeded(&pool, n, filter, seed).await {
         Err(e) => Html(err_html(&e.to_string())),
         Ok(data) if data.is_empty() => {
             Html(r#"<p class="muted">No images in db.</p>"#.to_string())
@@ -336,7 +336,7 @@ pub async fn explore(
     let n = params.n.unwrap_or(20);
 
     if let Some(h) = hash {
-        let paths = match crate::db::images_for_group(&pool, h).await {
+        let paths = match idup::db::images_for_group(&pool, h).await {
             Ok(data) => data.into_iter().map(|d| d.path).collect::<Vec<_>>(),
             Err(e) => return Html(simple_error_page(&e.to_string())),
         };
@@ -349,7 +349,7 @@ pub async fn explore(
     }
 
     if let Some(seed_val) = seed {
-        let paths = match crate::db::random_images_seeded(&pool, n, filter, seed_val).await {
+        let paths = match idup::db::random_images_seeded(&pool, n, filter, seed_val).await {
             Ok(data) => data.into_iter().map(|d| d.path).collect::<Vec<_>>(),
             Err(e) => return Html(simple_error_page(&e.to_string())),
         };
@@ -362,7 +362,7 @@ pub async fn explore(
     }
 
     if let Some(f) = filter {
-        let paths = match crate::db::images_matching_filter_in_dir(&pool, dir, f).await {
+        let paths = match idup::db::images_matching_filter_in_dir(&pool, dir, f).await {
             Ok(data) => data.into_iter().map(|d| d.path).collect::<Vec<_>>(),
             Err(e) => return Html(simple_error_page(&e.to_string())),
         };
@@ -376,8 +376,8 @@ pub async fn explore(
 
     if let Some(d) = dir {
         let (subdirs_res, images_res) = tokio::join!(
-            crate::db::subdirs_in_dir(&pool, d),
-            crate::db::images_in_dir(&pool, d),
+            idup::db::subdirs_in_dir(&pool, d),
+            idup::db::images_in_dir(&pool, d),
         );
         let subdirs = match subdirs_res {
             Ok(s) => s,
@@ -394,8 +394,8 @@ pub async fn explore(
     // No params: default to "/" so the top-level directories are shown
     let d = "/";
     let (subdirs_res, images_res) = tokio::join!(
-        crate::db::subdirs_in_dir(&pool, d),
-        crate::db::images_in_dir(&pool, d),
+        idup::db::subdirs_in_dir(&pool, d),
+        idup::db::images_in_dir(&pool, d),
     );
     let subdirs = match subdirs_res {
         Ok(s) => s,
@@ -423,7 +423,7 @@ pub async fn image_file(
     use axum::http::{header, StatusCode};
 
     // Gate: only serve paths tracked in the database.
-    match crate::db::path_exists_in_db(&pool, &params.path).await {
+    match idup::db::path_exists_in_db(&pool, &params.path).await {
         Ok(true) => {}
         Ok(false) => {
             return axum::response::Response::builder()

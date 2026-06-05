@@ -1,12 +1,7 @@
 use clap::{Parser, Subcommand};
+use idup::{db, hash, scan, update};
 use sqlx::SqlitePool;
 use std::path::PathBuf;
-
-mod db;
-mod hash;
-mod scan;
-mod update;
-mod web;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -40,7 +35,7 @@ enum Command {
 
         // ── Presets ────────────────────────────────────────────────────────
 
-        /// [Preset] SHA-256 base + rot90/180/270. Detects rotated exact duplicates.
+        /// [Preset] SHA-256 base + rotations, no flips, no phash
         /// Mutually exclusive with --all and individual hash flags.
         #[arg(long, help_heading = "Hash Presets", conflicts_with_all = ["all", "phash", "rotations", "flips"])]
         exact: bool,
@@ -105,16 +100,6 @@ enum Command {
         /// Glob pattern to filter paths (e.g. "*.jpg", "/home/user/Photos/*")
         #[arg(short, long)]
         filter: Option<String>,
-    },
-
-    /// Serve a web UI for browsing duplicates
-    Web {
-        /// Port to listen on
-        #[arg(short, long, default_value_t = 3000)]
-        port: u16,
-        /// Open the browser automatically after starting
-        #[arg(long)]
-        open: bool,
     },
 }
 
@@ -234,10 +219,6 @@ async fn main() -> sqlx::Result<()> {
             } else {
                 println!("Aborted.");
             }
-        }
-
-        Command::Web { port, open } => {
-            web::serve(port, open, pool).await;
         }
 
         Command::Update { path, cleanup } => {

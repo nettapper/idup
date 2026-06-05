@@ -1106,18 +1106,14 @@ name = "idup"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
- "axum",
  "clap",
  "directories",
  "env_logger",
  "image",
  "infer",
- "open",
- "serde",
  "sqlx",
  "tempfile",
  "tokio",
- "tower-http",
  "xxhash-rust",
 ]
 
@@ -1242,6 +1238,21 @@ name = "ivid"
 version = "0.1.0"
 dependencies = [
  "clap",
+]
+
+[[package]]
+name = "iweb"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "clap",
+ "idup",
+ "infer",
+ "open",
+ "serde",
+ "sqlx",
+ "tokio",
+ "tower-http",
 ]
 
 [[package]]
