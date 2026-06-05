@@ -1,7 +1,7 @@
 use crate::hash::{ImgHash, ImgHashKind};
 use directories::ProjectDirs;
 use sqlx::sqlite::SqliteConnectOptions;
-use sqlx::{query, query_as, query_scalar, FromRow, SqlitePool};
+use sqlx::{query, query_as, query_scalar, FromRow, SqlitePool, SqliteConnection};
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -87,18 +87,19 @@ pub async fn exact_matches_grouped(
 
 pub async fn save(pool: &SqlitePool, img: &ImgHash) -> Result<(), sqlx::Error> {
     let path = normalize_path(&img.path);
+    let mut conn = pool.acquire().await?;
 
-    let image_id: i64 = match existing_image_id(pool, &path).await? {
+    let image_id: i64 = match existing_image_id(&mut *conn, &path).await? {
         Some(id) => id,
         None => {
             query("INSERT INTO images (path) VALUES (?)")
                 .bind(&path)
-                .execute(pool)
+                .execute(&mut *conn)
                 .await?;
 
             sqlx::query_scalar::<_, i64>("SELECT images_id FROM images WHERE path = ?")
                 .bind(&path)
-                .fetch_one(pool)
+                .fetch_one(&mut *conn)
                 .await?
         }
     };
@@ -106,19 +107,80 @@ pub async fn save(pool: &SqlitePool, img: &ImgHash) -> Result<(), sqlx::Error> {
     query(
         "INSERT INTO hashes (images_id, kind, hash)
          VALUES (?, ?, ?)
-         ON CONFLICT(images_id, kind, hash)
+         ON CONFLICT(images_id, kind)
          DO UPDATE SET hash = excluded.hash",
     )
     .bind(image_id)
     .bind(img.kind.to_string())
     .bind(&img.hash)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
 
     if let ImgHashKind::Phash = img.kind {
-        save_partial_phash(pool, image_id, img).await?;
+        save_partial_phash(&mut *conn, image_id, img).await?;
     }
 
+    Ok(())
+}
+
+pub async fn save_image_hashes(
+    pool: &SqlitePool,
+    path: &Path,
+    hashes: &[ImgHash],
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let path_str = normalize_path(path);
+
+    // Clear old hashes inside transaction
+    query("DELETE FROM hashes WHERE images_id IN (SELECT images_id FROM images WHERE path = ?)")
+        .bind(&path_str)
+        .execute(&mut *tx)
+        .await?;
+
+    query("DELETE FROM partial_hashes WHERE images_id IN (SELECT images_id FROM images WHERE path = ?)")
+        .bind(&path_str)
+        .execute(&mut *tx)
+        .await?;
+
+    if hashes.is_empty() {
+        tx.commit().await?;
+        return Ok(());
+    }
+
+    let image_id: i64 = match existing_image_id(&mut *tx, &path_str).await? {
+        Some(id) => id,
+        None => {
+            query("INSERT INTO images (path) VALUES (?)")
+                .bind(&path_str)
+                .execute(&mut *tx)
+                .await?;
+
+            sqlx::query_scalar::<_, i64>("SELECT images_id FROM images WHERE path = ?")
+                .bind(&path_str)
+                .fetch_one(&mut *tx)
+                .await?
+        }
+    };
+
+    for img in hashes {
+        query(
+            "INSERT INTO hashes (images_id, kind, hash)
+             VALUES (?, ?, ?)
+             ON CONFLICT(images_id, kind)
+             DO UPDATE SET hash = excluded.hash",
+        )
+        .bind(image_id)
+        .bind(img.kind.to_string())
+        .bind(&img.hash)
+        .execute(&mut *tx)
+        .await?;
+
+        if let ImgHashKind::Phash = img.kind {
+            save_partial_phash(&mut *tx, image_id, img).await?;
+        }
+    }
+
+    tx.commit().await?;
     Ok(())
 }
 
@@ -425,10 +487,10 @@ pub async fn delete_image(pool: &SqlitePool, path: &str) -> Result<(), sqlx::Err
     Ok(())
 }
 
-async fn existing_image_id(pool: &SqlitePool, path: &str) -> Result<Option<i64>, sqlx::Error> {
+async fn existing_image_id(conn: &mut SqliteConnection, path: &str) -> Result<Option<i64>, sqlx::Error> {
     query_as::<_, (i64,)>("SELECT images_id FROM images WHERE path = ?")
         .bind(path)
-        .fetch_optional(pool)
+        .fetch_optional(conn)
         .await
         .map(|row| row.map(|r| r.0))
 }
@@ -441,7 +503,7 @@ fn normalize_path(path: &Path) -> String {
 }
 
 async fn save_partial_phash(
-    pool: &SqlitePool,
+    conn: &mut SqliteConnection,
     image_id: i64,
     img: &ImgHash,
 ) -> Result<(), sqlx::Error> {
@@ -461,7 +523,7 @@ async fn save_partial_phash(
         .bind(idx as i64)
         .bind(chunk)
         .bind(image_id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     }
 
@@ -504,7 +566,7 @@ async fn setup_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             images_id INTEGER,
             kind TEXT,
             hash TEXT,
-            PRIMARY KEY (images_id, kind, hash),
+            PRIMARY KEY (images_id, kind),
             FOREIGN KEY (images_id) REFERENCES images (images_id)
         );
 
@@ -530,28 +592,36 @@ async fn setup_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .fetch_one(pool)
     .await?;
 
-    if hash_is_pk_col == 0 {
-        query(
+    if hash_is_pk_col > 0 {
+        let mut tx = pool.begin().await?;
+        sqlx::query(
             r#"
-            CREATE TABLE hashes_v2 (
+            CREATE TABLE hashes_v3 (
                 images_id INTEGER,
                 kind TEXT,
                 hash TEXT,
-                PRIMARY KEY (images_id, kind, hash),
+                PRIMARY KEY (images_id, kind),
                 FOREIGN KEY (images_id) REFERENCES images (images_id)
             );
-
-            INSERT INTO hashes_v2 (images_id, kind, hash)
-            SELECT images_id, kind, hash
-            FROM hashes;
-
-            DROP TABLE hashes;
-
-            ALTER TABLE hashes_v2 RENAME TO hashes;
             "#,
         )
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO hashes_v3 (images_id, kind, hash)
+            SELECT images_id, kind, hash
+            FROM hashes
+            ON CONFLICT(images_id, kind) DO UPDATE SET hash = excluded.hash;
+            "#,
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query("DROP TABLE hashes;").execute(&mut *tx).await?;
+        sqlx::query("ALTER TABLE hashes_v3 RENAME TO hashes;").execute(&mut *tx).await?;
+        tx.commit().await?;
     }
 
     Ok(())
@@ -608,7 +678,21 @@ mod tests {
         .fetch_one(&pool)
         .await?;
 
-        assert_eq!(count, 3);
+        assert_eq!(count, 2);
+
+        // Verify the latest hash value for "sha256 imgdata" is 33333333, not 11111111
+        let latest_hash: String = query_scalar(
+            "SELECT hash
+             FROM hashes
+             WHERE images_id = (SELECT images_id FROM images WHERE path = ?)
+               AND kind = 'sha256 imgdata'
+            "
+        )
+        .bind(path)
+        .fetch_one(&pool)
+        .await?;
+
+        assert_eq!(latest_hash, "33333333");
 
         Ok(())
     }

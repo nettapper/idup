@@ -140,50 +140,35 @@ pub async fn process_path(path: PathBuf, recursive: bool, opts: &ScanOptions, po
             .unwrap_or("cannot print path due to non-UTF8 chars");
 
         if is_img(&curr).unwrap_or(false) {
-            if let Err(err) = db::clear_hashes_for_path(pool, &curr).await {
-                println!("Cannot clear old hashes for {}: {}", file_name, err);
-                continue;
-            }
+            let mut img_hashes = Vec::new();
 
             // --- xxh3 exact hashes (compiled in when the `xxh3` feature is active) ---
             #[cfg(feature = "xxh3")]
             match hash::xxh3::selected_hashes_of_img_data(&curr, opts.rotations, opts.flips) {
-                Ok(hashes) => {
-                    for h in hashes {
-                        if let Err(err) = db::save(pool, &h).await {
-                            println!("Cannot save xxh3 hash for {}: {}", file_name, err);
-                        }
-                    }
-                }
+                Ok(hashes) => img_hashes.extend(hashes),
                 Err(err) => println!("Cannot compute xxh3 for {}: {}", file_name, err),
             }
 
             // --- sha256 exact hashes (compiled in when the `sha256` feature is active) ---
             #[cfg(feature = "sha256")]
             match hash::sha256::selected_hashes_of_img_data(&curr, opts.rotations, opts.flips) {
-                Ok(hashes) => {
-                    for h in hashes {
-                        if let Err(err) = db::save(pool, &h).await {
-                            println!("Cannot save sha256 hash for {}: {}", file_name, err);
-                        }
-                    }
-                }
+                Ok(hashes) => img_hashes.extend(hashes),
                 Err(err) => println!("Cannot compute sha256 for {}: {}", file_name, err),
             }
 
             // --- perceptual hash ---
             if opts.phash {
                 match hash::phash::hash_path(&curr) {
-                    Ok(ph) => {
-                        if let Err(err) = db::save(pool, &ph).await {
-                            println!("Cannot save phash for {}: {}", file_name, err);
-                        }
-                    }
+                    Ok(ph) => img_hashes.push(ph),
                     Err(err) => println!("Cannot hash phash for {}: {}", file_name, err),
                 }
             }
 
-            counter.fetch_add(1, Ordering::Relaxed);
+            if let Err(err) = db::save_image_hashes(pool, &curr, &img_hashes).await {
+                println!("Cannot save hashes for {}: {}", file_name, err);
+            } else {
+                counter.fetch_add(1, Ordering::Relaxed);
+            }
         } else {
             println!("skipping file={}", file_name);
         }

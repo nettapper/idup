@@ -149,10 +149,11 @@ Key public functions:
 | `subdirs_in_dir(pool, dir)` | Returns full paths of immediate subdirectories of `dir` that contain images |
 | `images_matching_filter_in_dir(pool, dir, filter)` | Returns images matching a glob filter, optionally scoped to `dir` |
 | `save(pool, img)` | Upserts an image and its hash |
+| `save_image_hashes(pool, path, hashes)` | Clears and saves all hashes for a path in a single transaction (batch operation) |
 | `db_stats(pool)` | Returns image count and hash counts grouped by kind |
 | `clear_hashes_for_path(pool, path)` | Deletes all hashes for a given path |
 
-DB location: `$XDG_DATA_HOME/idup/idup.db3` (defaults to `~/.local/share/idup/idup.db3`). Created automatically on first run. Includes an in-band schema migration to fix the `hashes` primary key (recreates as `hashes_v2` if old schema detected).
+DB location: `$XDG_DATA_HOME/idup/idup.db3` (defaults to `~/.local/share/idup/idup.db3`). Created automatically on first run. Includes an in-band schema migration to fix the `hashes` primary key (recreates as `hashes_v3` if old schema detected).
 
 ### `iweb` crate — `src/main.rs` and `src/handlers.rs`
 Standalone Axum-based web server binary. Depends on `idup` as a library for all database, hashing, scanning, and update logic. Serves a single-page UI (`assets/index.html`) that uses htmx to call JSON/HTML fragment endpoints. Also serves a standalone explore page for browsing and viewing images.

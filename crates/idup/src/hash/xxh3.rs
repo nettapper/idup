@@ -17,47 +17,48 @@ pub fn selected_hashes_of_img_data(
     results.push(ImgHash {
         path: path.to_path_buf(),
         kind: ImgHashKind::Xxh3("imgdata".to_string()),
-        hash: hash(&img.clone().into_bytes()),
+        hash: hash(img.as_bytes()),
     });
 
     if include_rotations {
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Xxh3("imgdata rot90".to_string()),
-            hash: hash(&img.rotate90().into_bytes()),
+            hash: hash(img.rotate90().as_bytes()),
         });
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Xxh3("imgdata rot180".to_string()),
-            hash: hash(&img.rotate180().into_bytes()),
+            hash: hash(img.rotate180().as_bytes()),
         });
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Xxh3("imgdata rot270".to_string()),
-            hash: hash(&img.rotate270().into_bytes()),
+            hash: hash(img.rotate270().as_bytes()),
         });
     }
 
     if include_flips {
+        let flipped = img.flipv();
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Xxh3("imgdata flipv".to_string()),
-            hash: hash(&img.flipv().into_bytes()),
+            hash: hash(flipped.as_bytes()),
         });
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Xxh3("imgdata flipv rot90".to_string()),
-            hash: hash(&img.flipv().rotate90().into_bytes()),
+            hash: hash(flipped.rotate90().as_bytes()),
         });
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Xxh3("imgdata flipv rot180".to_string()),
-            hash: hash(&img.flipv().rotate180().into_bytes()),
+            hash: hash(flipped.rotate180().as_bytes()),
         });
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Xxh3("imgdata flipv rot270".to_string()),
-            hash: hash(&img.flipv().rotate270().into_bytes()),
+            hash: hash(flipped.rotate270().as_bytes()),
         });
     }
 

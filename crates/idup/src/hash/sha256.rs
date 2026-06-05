@@ -17,47 +17,48 @@ pub fn selected_hashes_of_img_data(
     results.push(ImgHash {
         path: path.to_path_buf(),
         kind: ImgHashKind::Sha256("imgdata".to_string()),
-        hash: hash(img.clone().into_bytes()),
+        hash: hash(img.as_bytes()),
     });
 
     if include_rotations {
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Sha256("imgdata rot90".to_string()),
-            hash: hash(img.rotate90().into_bytes()),
+            hash: hash(img.rotate90().as_bytes()),
         });
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Sha256("imgdata rot180".to_string()),
-            hash: hash(img.rotate180().into_bytes()),
+            hash: hash(img.rotate180().as_bytes()),
         });
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Sha256("imgdata rot270".to_string()),
-            hash: hash(img.rotate270().into_bytes()),
+            hash: hash(img.rotate270().as_bytes()),
         });
     }
 
     if include_flips {
+        let flipped = img.flipv();
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Sha256("imgdata flipv".to_string()),
-            hash: hash(img.flipv().into_bytes()),
+            hash: hash(flipped.as_bytes()),
         });
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Sha256("imgdata flipv rot90".to_string()),
-            hash: hash(img.flipv().rotate90().into_bytes()),
+            hash: hash(flipped.rotate90().as_bytes()),
         });
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Sha256("imgdata flipv rot180".to_string()),
-            hash: hash(img.flipv().rotate180().into_bytes()),
+            hash: hash(flipped.rotate180().as_bytes()),
         });
         results.push(ImgHash {
             path: path.to_path_buf(),
             kind: ImgHashKind::Sha256("imgdata flipv rot270".to_string()),
-            hash: hash(img.flipv().rotate270().into_bytes()),
+            hash: hash(flipped.rotate270().as_bytes()),
         });
     }
 
@@ -71,13 +72,14 @@ pub fn hash_path(path: &Path) -> Result<ImgHash, std::io::Error> {
     Ok(ImgHash {
         path: path.to_path_buf(),
         kind: ImgHashKind::Sha256("sha256".to_string()),
-        hash: hash(data),
+        hash: hash(&data),
     })
 }
 
 // Pseudocode taken from [Wikipedia](https://en.wikipedia.org/wiki/SHA-2#Pseudocode)
 #[rustfmt::skip]
-pub fn hash(mut data: Vec<u8>) -> String {
+pub fn hash(data: &[u8]) -> String {
+    let mut data = data.to_vec();
     // Note 1: All variables are 32 bit unsigned integers and addition is calculated modulo 2^32
     // Note 2: For each round, there is one round constant k[i] and one entry in the message schedule array w[i], 0 ≤ i ≤ 63
     // Note 3: The compression function uses 8 working variables, a through h
@@ -234,7 +236,7 @@ mod tests {
     fn test_empty() {
         let data = String::from("").into_bytes();
         assert_eq!(
-            hash(data),
+            hash(&data),
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         );
     }
@@ -243,7 +245,7 @@ mod tests {
     fn test_abcs() {
         let data = String::from("abc").into_bytes();
         assert_eq!(
-            hash(data),
+            hash(&data),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
     }
@@ -252,7 +254,7 @@ mod tests {
     fn test_abcs_repeat() {
         let data = String::from("aaaabbbbcccc").into_bytes();
         assert_eq!(
-            hash(data),
+            hash(&data),
             "11c85195ae99540ac07f80e2905e6e39aaefc4ac94cd380f366e79ba83560566"
         );
     }
@@ -265,7 +267,7 @@ mod tests {
             String::from("1111111111222222222233333333334444444444555555555566666666667777777777")
                 .into_bytes();
         assert_eq!(
-            hash(data),
+            hash(&data),
             "7c3bfca2e1355c1dd2c1343e490625b4a59a5c0aefb9d2177a55a6f5d464f369"
         );
     }
@@ -276,7 +278,7 @@ mod tests {
         // so I'll add 440 / 8 = 55 ascii a's
         let data: Vec<u8> = [97].repeat(55);
         assert_eq!(
-            hash(data),
+            hash(&data),
             "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318"
         );
     }
