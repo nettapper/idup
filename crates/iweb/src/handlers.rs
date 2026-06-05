@@ -271,23 +271,26 @@ pub async fn list(
                 let mut html = String::from(r#"<div class="groups">"#);
                 let mut current_hash = String::new();
                 let mut group_num = 0usize;
-                // Accumulate paths per group so we can build the gallery link
                 let mut group_paths: Vec<String> = Vec::new();
 
-                // Helper closure to flush a completed group
                 let flush_group =
                     |html: &mut String, num: usize, hash: &str, paths: &[String]| {
                         let explore_href = explore_href_for_hash(hash);
                         html.push_str(&format!(
-                            r#"<div class="group"><h3><a href="{explore_href}" target="_blank" class="group-link">Group {num}</a></h3><ul>"#
+                            r#"<div class="group"><h3><a href="{explore_href}" target="_blank" class="group-link">Group {num}</a></h3><div class="dup-list">"#
                         ));
                         for p in paths {
+                            let encoded = url_encode(p);
                             html.push_str(&format!(
-                                "<li><code>{}</code></li>",
+                                r#"<div class="dup-item">
+                                    <img src="/api/image?path={}" class="dup-thumb" loading="lazy" />
+                                    <code>{}</code>
+                                </div>"#,
+                                encoded,
                                 esc(p)
                             ));
                         }
-                        html.push_str("</ul></div>");
+                        html.push_str("</div></div>");
                     };
 
                 for item in &data {
@@ -318,14 +321,19 @@ pub async fn list(
                 }
                 Ok(data) => {
                     let mut html =
-                        String::from(r#"<div class="group"><ul>"#);
+                        String::from(r#"<div class="group"><div class="dup-list">"#);
                     for item in &data {
+                        let encoded = url_encode(&item.path);
                         html.push_str(&format!(
-                            "<li><code>{}</code></li>",
+                            r#"<div class="dup-item">
+                                <img src="/api/image?path={}" class="dup-thumb" loading="lazy" />
+                                <code>{}</code>
+                            </div>"#,
+                            encoded,
                             esc(&item.path)
                         ));
                     }
-                    html.push_str("</ul></div>");
+                    html.push_str("</div></div>");
                     Html(html)
                 }
             }

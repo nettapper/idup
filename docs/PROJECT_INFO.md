@@ -207,18 +207,18 @@ ivid <VIDEO> [OPTIONS]
 
 ## Web UI Features
 
-The `iweb` binary starts a local HTTP server. The UI has panels for each CLI operation (scan, video, list, info, random, explore) plus image viewing:
+The `iweb` binary starts a local HTTP server. The UI has panels for each CLI operation (scan, video, dups, info, random, explore) plus image viewing:
 
 - **Scan panel**: Enter a directory path and options to scan images into the database.
 - **Video panel**: Extract frames from a video file using ivid. Displays a "Scan these frames" button which navigates to the scan panel with parameters pre-filled.
-- **List panel**: Each duplicate group header is a clickable link that opens `/explore?hash=<hash>` in a new browser tab.
+- **Dups panel**: Shows exact duplicate groups along with small preview thumbnails of each file. Each duplicate group header is a clickable link that opens `/explore?hash=<hash>` in a new browser tab.
 - **Random panel**: After fetching results, a "View All in Browser" button links to `/explore?seed=<seed>&n=<n>&filter=<filter>`, allowing deterministic replay of the exact same random selection.
 - **Clean panel**: Wipes the entire database. A browser `confirm()` dialog (via htmx `hx-confirm`) prompts the user before the request is sent.
 - **Explore panel**: Opens `/explore` in a new tab with optional starting directory and glob filter.
 - **Explore page** (`/explore`): Unified standalone image browser. Accepts:
   - `?dir=<path>` — directory browser showing subdirectory cards + images in the current dir, with breadcrumb navigation
   - `?filter=<glob>` — shows all images in the DB matching the glob (optionally scoped with `?dir=`)
-  - `?hash=<group_hash>` — shows all images in a duplicate group (used by the list panel)
+  - `?hash=<group_hash>` — shows all images in a duplicate group (used by the dups panel)
   - `?seed=<u64>&n=<u32>&filter=<glob>` — deterministic random N images (used by the random panel)
   - The page always shows a filter bar (dir + glob inputs) for in-page navigation without returning to the SPA.
 - **Image serving** (`/api/image`): Serves local image files by absolute path. Access is gated: only paths tracked in the idup DB are served.
