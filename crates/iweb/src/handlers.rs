@@ -977,8 +977,14 @@ const EXPLORE_SCRIPT: &str = r#"  <script>
     const modalImg   = document.getElementById('modal-img');
     const modalTitle = document.getElementById('modal-title');
     const modalOpen  = document.getElementById('modal-open');
+    const imgArea    = document.querySelector('.modal-img-area');
 
-    function openModal(card) {
+    const cards = Array.from(document.querySelectorAll('.card'));
+    let currentCardIndex = -1;
+
+    function updateModalContent() {
+      if (currentCardIndex < 0 || currentCardIndex >= cards.length) return;
+      const card = cards[currentCardIndex];
       const path   = card.dataset.path;
       const dir    = card.dataset.dir;
       const imgSrc = card.dataset.imgSrc;
@@ -988,13 +994,33 @@ const EXPLORE_SCRIPT: &str = r#"  <script>
       modalTitle.textContent = path;
       modalTitle.href        = '/explore?dir=' + encodeURIComponent(dir);
       modalOpen.href         = imgSrc;
-      modal.classList.add('open');
-      history.pushState({ modal: true }, '');
+    }
+
+    function showNext() {
+      if (cards.length === 0) return;
+      currentCardIndex = (currentCardIndex + 1) % cards.length;
+      updateModalContent();
+    }
+
+    function showPrev() {
+      if (cards.length === 0) return;
+      currentCardIndex = (currentCardIndex - 1 + cards.length) % cards.length;
+      updateModalContent();
+    }
+
+    function openModal(card) {
+      currentCardIndex = cards.indexOf(card);
+      updateModalContent();
+      if (!modal.classList.contains('open')) {
+        modal.classList.add('open');
+        history.pushState({ modal: true }, '');
+      }
     }
 
     function closeModal(fromPopstate) {
       modal.classList.remove('open');
       modalImg.src = '';
+      currentCardIndex = -1;
       if (!fromPopstate) history.back();
     }
 
@@ -1013,7 +1039,38 @@ const EXPLORE_SCRIPT: &str = r#"  <script>
     });
 
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(false);
+      if (!modal.classList.contains('open')) return;
+      if (e.key === 'Escape') {
+        closeModal(false);
+      } else if (e.key === 'ArrowRight') {
+        showNext();
+      } else if (e.key === 'ArrowLeft') {
+        showPrev();
+      }
+    });
+
+    imgArea.addEventListener('mousemove', e => {
+      const rect = imgArea.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const width = rect.width;
+      if (x < width * 0.25) {
+        imgArea.style.cursor = 'w-resize';
+      } else if (x > width * 0.75) {
+        imgArea.style.cursor = 'e-resize';
+      } else {
+        imgArea.style.cursor = 'default';
+      }
+    });
+
+    imgArea.addEventListener('click', e => {
+      const rect = imgArea.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const width = rect.width;
+      if (x < width * 0.25) {
+        showPrev();
+      } else if (x > width * 0.75) {
+        showNext();
+      }
     });
   </script>
 "#;
