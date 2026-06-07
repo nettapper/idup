@@ -895,9 +895,8 @@ const EXPLORE_CSS: &str = r#"
       background: #1a1d27;
       border: 1px solid #2d3148;
       border-radius: 10px;
-      max-width: min(92vw, 860px);
-      width: 100%;
-      height: min(92vh, 680px);
+      width: 90vw;
+      height: 90vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
