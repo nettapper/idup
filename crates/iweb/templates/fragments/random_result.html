@@ -1,0 +1,8 @@
+<div class="random-header">
+    <a href="{{ explore_href }}" target="_blank" class="view-btn">View all {{ count }} in browser</a>
+</div>
+<ul class="random-list">
+    {% for p in paths %}
+    <li><code>{{ p }}</code></li>
+    {% endfor %}
+</ul>

@@ -155,8 +155,18 @@ Key public functions:
 
 DB location: `$XDG_DATA_HOME/idup/idup.db3` (defaults to `~/.local/share/idup/idup.db3`). Created automatically on first run. Includes an in-band schema migration to fix the `hashes` primary key (recreates as `hashes_v3` if old schema detected).
 
-### `iweb` crate — `src/main.rs` and `src/handlers.rs`
-Standalone Axum-based web server binary. Depends on `idup` as a library for all database, hashing, scanning, and update logic. Serves a single-page UI (`assets/index.html`) that uses htmx to call JSON/HTML fragment endpoints. Also serves a standalone explore page for browsing and viewing images.
+### `iweb` crate — Layered Axum Web Crate
+Standalone Axum-based web server binary. Depends on `idup` as a library for database and hash operations, `ivid` for frame extraction, and `icrop` for image crop/rotation.
+
+It uses a clean layered architecture:
+- **`src/main.rs`**: CLI parser and server bootloader.
+- **`src/router.rs`**: Centralized route registry.
+- **`src/state.rs`**: Crate-wide shared state type definitions.
+- **`src/error.rs`**: Unified error type `AppError` mapping to HTTP status codes and Askama error templates.
+- **`src/handlers/`**: Thin HTTP layer modules parsing requests and rendering HTML templates.
+- **`src/services/`**: Business logic layer (explore fetching, crop processing, file ops) decoupled from HTTP.
+- **`templates/`**: Askama type-safe HTML template directory.
+- **`assets/`**: Static CSS, JS, and HTML assets.
 
 Routes:
 
@@ -252,7 +262,7 @@ The `iweb` binary starts a local HTTP server. The UI has panels for each CLI ope
 - **Schema migration inline**: No migration framework; schema setup and the `hashes` PK fix are handled in `setup_db()` at startup.
 - **lib+bin crate pattern**: `idup` is structured as a lib+bin crate. `lib.rs` re-exports `db`, `hash`, `scan`, and `update` as public modules. The binary (`main.rs`) imports these via `use idup::{...}`. The `iweb` crate depends on `idup` as a library to access the same shared logic.
 - **Web image serving is DB-gated**: `/api/image` only serves files whose absolute path is already tracked in the idup database. This prevents arbitrary file system access.
-- **Explore page is server-rendered**: The `/explore` handler builds the full HTML string in Rust (no template engine). Paths are embedded directly into `<img src="/api/image?path=...">` tags with percent-encoded URLs.
+- **Explore page is server-rendered via Askama templates**: The `/explore` handler fetches data via the services layer and renders it using type-safe Askama HTML templates. CSS and JavaScript are separated into `/explore.css` and `/explore.js` endpoints.
 - **No external services**: Entirely self-contained. The web UI loads htmx from a CDN but otherwise requires no network access.
 - **ivid shells out to ffmpeg**: The `ivid` crate uses `std::process::Command` to invoke `ffmpeg` (frame extraction) and `ffprobe` (video probing for duration). No Rust video decoding libraries are used. ffmpeg availability is validated at startup.
 - **ivid supports two interval modes**: Time-based (default, in seconds) and frame-based (in frames). Extraction is performed via a single ffmpeg command with filter graphs (`fps` or `select`) rather than calling ffmpeg once per frame. Files are named sequentially (e.g. `myvideo_0001.png`).

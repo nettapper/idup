@@ -1,0 +1,15 @@
+<div class="groups">
+    {% for group in groups %}
+    <div class="group">
+        <h3><a href="{{ group.explore_href }}" target="_blank" class="group-link">Group {{ group.num }}</a></h3>
+        <div class="dup-list">
+            {% for item in group.items %}
+            <div class="dup-item">
+                <img src="/api/image?path={{ item.encoded_path }}" class="dup-thumb" loading="lazy" />
+                <code>{{ item.display_path }}</code>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>

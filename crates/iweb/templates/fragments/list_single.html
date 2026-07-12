@@ -1,0 +1,10 @@
+<div class="group">
+    <div class="dup-list">
+        {% for item in items %}
+        <div class="dup-item">
+            <img src="/api/image?path={{ item.encoded_path }}" class="dup-thumb" loading="lazy" />
+            <code>{{ item.display_path }}</code>
+        </div>
+        {% endfor %}
+    </div>
+</div>

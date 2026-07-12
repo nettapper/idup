@@ -1,0 +1,10 @@
+<div class="result-success">
+    Extraction complete
+    <p class="muted" style="font-size:0.85rem;margin:1rem 0">
+        {{ frame_count }} frames extracted in {{ elapsed_secs }}s<br>
+        Output: <code>{{ output_dir }}</code>
+    </p>
+    <a class="view-btn" href="/?panel=scan&path={{ encoded_path }}&recursive=true" style="display:inline-block;text-decoration:none">
+        Scan these frames
+    </a>
+</div>

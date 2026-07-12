@@ -1,0 +1,47 @@
+  <div class="modal-overlay" id="modal" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <div class="modal-header">
+        <a class="modal-title" id="modal-title" href="#" target="_blank" title="Browse directory"></a>
+        <button class="modal-close" id="modal-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="modal-img-area">
+        <img id="modal-img" src="" alt="" />
+        <div class="crop-workspace">
+          <div class="crop-controls">
+            <div class="crop-control-group">
+              <label for="rotate-slider">Rotate:</label>
+              <input type="range" id="rotate-slider" min="-180" max="180" step="0.5" value="0" />
+              <input type="number" id="rotate-num" min="-180" max="180" step="0.5" value="0" style="width: 65px;" />
+              <span>&deg;</span>
+            </div>
+            <button class="modal-btn secondary" id="reset-crop-btn" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">Reset</button>
+          </div>
+          <div class="crop-canvas-container">
+            <canvas id="crop-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="viewer-footer-controls" id="viewer-footer-controls" style="display: flex; gap: 0.5rem; align-items: center; width: 100%;">
+          <a id="modal-open" href="#" target="_blank" class="modal-btn secondary">Open image</a>
+          <button id="modal-crop-btn" class="modal-btn">Crop &amp; Rotate</button>
+        </div>
+        <div class="crop-footer-controls" id="crop-footer-controls" style="display: none;">
+          <div class="crop-save-dialog">
+            <label>
+              <input type="checkbox" id="crop-overwrite" checked />
+              Overwrite original
+            </label>
+            <div id="crop-filename-group" style="display: none; align-items: center; gap: 0.3rem;">
+              <label for="crop-filename">New name:</label>
+              <input type="text" id="crop-filename" placeholder="image_cropped.png" />
+            </div>
+          </div>
+          <div class="crop-footer-actions">
+            <button id="crop-cancel-btn" class="modal-btn secondary">Cancel</button>
+            <button id="crop-save-btn" class="modal-btn">Save Crop</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>

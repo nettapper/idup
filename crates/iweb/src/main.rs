@@ -1,6 +1,10 @@
 use clap::Parser;
 
+mod error;
 mod handlers;
+mod router;
+mod services;
+mod state;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -25,27 +29,7 @@ async fn main() -> sqlx::Result<()> {
 }
 
 async fn serve(port: u16, open_browser: bool, pool: sqlx::SqlitePool) {
-    use axum::routing::{get, post};
-    use axum::Router;
-    use tower_http::cors::CorsLayer;
-
-    let app = Router::new()
-        .route("/", get(handlers::index))
-        .route("/style.css", get(handlers::style))
-        .route("/api/scan", post(handlers::scan))
-        .route("/api/extract", post(handlers::extract))
-        .route("/api/update", post(handlers::update))
-        .route("/api/clean", post(handlers::clean))
-        .route("/api/crop", post(handlers::crop))
-        .route("/api/explore/delete", post(handlers::explore_delete))
-        .route("/api/explore/move", post(handlers::explore_move))
-        .route("/api/list", get(handlers::list))
-        .route("/api/info", get(handlers::info))
-        .route("/api/random", get(handlers::random))
-        .route("/api/image", get(handlers::image_file))
-        .route("/explore", get(handlers::explore))
-        .with_state(pool)
-        .layer(CorsLayer::permissive());
+    let app = router::build_router(pool);
 
     let addr = format!("0.0.0.0:{port}");
     let url = format!("http://localhost:{port}");

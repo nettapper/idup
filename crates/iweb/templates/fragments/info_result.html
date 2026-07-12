@@ -1,0 +1,15 @@
+<div class="info-result">
+    {% if let Some(ph) = phash %}
+    <p><strong>pHash:</strong> <code>{{ ph }}</code></p>
+    {% endif %}
+    {% if let Some(phe) = phash_error %}
+    <p class="result-error">pHash error: {{ phe }}</p>
+    {% endif %}
+    
+    {% if let Some(sh) = sha256 %}
+    <p><strong>SHA-256:</strong> <code>{{ sh }}</code></p>
+    {% endif %}
+    {% if let Some(she) = sha256_error %}
+    <p class="result-error">SHA-256 error: {{ she }}</p>
+    {% endif %}
+</div>

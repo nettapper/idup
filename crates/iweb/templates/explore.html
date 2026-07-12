@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title }} | idup</title>
+  <link rel="stylesheet" href="/explore.css" />
+</head>
+<body>
+  <header>
+    <div class="logo">idup</div>
+    <form class="filter-bar" method="get" action="/explore">
+      <input type="text" name="dir" placeholder="Directory path..." value="{{ dir_value }}" />
+      <input type="text" name="filter" placeholder="Glob filter (e.g. *.jpg)" value="{{ filter_value }}" />
+      <button type="submit">Go</button>
+    </form>
+  </header>
+  
+  {% if show_breadcrumbs %}
+  <nav class="breadcrumb">
+    {% for crumb in breadcrumbs %}
+      {% if let Some(href) = crumb.href %}
+        <a href="{{ href }}">{{ crumb.label }}</a>
+      {% else %}
+        <span class="current">{{ crumb.label }}</span>
+      {% endif %}
+      {% if !loop.last %}
+        <span class="sep">/</span>
+      {% endif %}
+    {% endfor %}
+  </nav>
+  {% endif %}
+  
+  {% match empty_message %}
+    {% when Some with (msg) %}
+      <div class="empty">{{ msg }}</div>
+    {% when None %}
+      {% if !subdirs.is_empty() %}
+      <div class="section">
+        {% if show_headers %}
+        <p class="section-title">Folders <span class="count">({{ subdirs.len() }})</span></p>
+        {% endif %}
+        <div class="grid">
+          {% for d in subdirs %}
+          <a href="{{ d.href }}" class="dir-card">
+            <div class="dir-body"><span class="dir-symbol">dir</span></div>
+            <p class="name" title="{{ d.full_path }}">{{ d.name }}</p>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      
+      {% if !images.is_empty() %}
+      <div class="section">
+        {% if show_headers %}
+        <p class="section-title">Images <span class="count">({{ images.len() }})</span></p>
+        {% endif %}
+        <div class="grid">
+          {% for img in images %}
+          <div class="card" data-path="{{ img.path }}" data-dir="{{ img.parent_dir }}" data-img-src="{{ img.img_src }}">
+            <div class="card-checkbox-container">
+              <input type="checkbox" class="card-checkbox" data-path="{{ img.path }}" />
+            </div>
+            <div class="card-img">
+              <img src="{{ img.img_src }}" loading="lazy" alt="{{ img.filename }}" />
+            </div>
+            <p class="name" title="{{ img.path }}">{{ img.filename }}</p>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+  {% endmatch %}
+  
+  {% include "partials/modal.html" %}
+  {% include "partials/selection_bar.html" %}
+  {% include "partials/move_modal.html" %}
+  
+  <script src="/explore.js" defer></script>
+</body>
+</html>
