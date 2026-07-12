@@ -241,7 +241,7 @@ The `iweb` binary starts a local HTTP server. The UI has panels for each CLI ope
   - `?hash=<group_hash>` — shows all images in a duplicate group (used by the dups panel)
   - `?seed=<u64>&n=<u32>&filter=<glob>` — deterministic random N images (used by the random panel)
   - The page always shows a filter bar (dir + glob inputs) for in-page navigation without returning to the SPA.
-- **Multi-file Selection**: Select multiple images on the `/explore` page using custom circular checkboxes or Shift-clicking (performs range selection). A sleek, floating selection bar/toolbar appears when files are selected, providing options to:
+- **Multi-file Selection**: Select multiple images on the `/explore` page using custom circular checkboxes, Ctrl+Clicking anywhere on the card, or Shift-clicking (performs range selection since the last click). Both features invert selection state depending on the clicked image's state. A sleek, floating selection bar/toolbar appears when files are selected, providing options to:
   - **Select All** / **Deselect All**
   - **Move**: Opens a modal where the user can enter the destination directory path, toggle auto-creation of missing folders, and choose a collision behavior (Rename with numeric suffix, Overwrite, or Skip).
   - **Delete**: Prompts the user with a confirmation dialog before permanently removing the selected files from disk and the database.

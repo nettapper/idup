@@ -85,6 +85,14 @@
       const cb = card.querySelector('.card-checkbox');
       if (cb) {
         cb.addEventListener('click', e => {
+          if (e.shiftKey) {
+            // Let it bubble so card's shift click handler handles it
+            return;
+          }
+          if (e.ctrlKey || e.metaKey) {
+            // Let it bubble so card's ctrl click handler handles it
+            return;
+          }
           e.stopPropagation();
           toggleCardSelection(card, cb.checked);
         });
@@ -98,10 +106,19 @@
           return;
         }
 
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          const isSelected = card.classList.contains('selected');
+          toggleCardSelection(card, !isSelected);
+          return;
+        }
+
         if (e.target.closest('.card-checkbox-container')) {
           return;
         }
 
+        lastSelectedCard = card;
         openModal(card);
       });
     });
