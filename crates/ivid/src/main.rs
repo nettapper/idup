@@ -3,7 +3,7 @@ use std::process;
 
 use clap::Parser;
 
-use ivid::extract::{ExtractConfig, IntervalMode, run_extraction};
+use ivid::extract::{ExtractConfig, IntervalMode, run_extraction, generate_temp_dir};
 use ivid::time;
 
 
@@ -35,8 +35,13 @@ struct Cli {
 
     /// Output directory for extracted frames.
     /// Defaults to ./ivid_<video_stem>/ in the current directory.
-    #[arg(long, short)]
+    #[arg(long, short, conflicts_with = "temp_dir")]
     output: Option<PathBuf>,
+
+    /// Use a randomly named temporary directory under /tmp/nettapper/ivid/extract/<timestamp>.
+    /// Mutually exclusive with --output.
+    #[arg(long)]
+    temp_dir: bool,
 
     /// Create the output directory if it doesn't exist
     #[arg(long)]
@@ -63,10 +68,15 @@ fn run(cli: Cli) -> Result<(), String> {
         .and_then(|s| s.to_str())
         .unwrap_or("video");
 
-    let user_specified_output = cli.output.is_some();
-    let output_dir = cli
-        .output
-        .unwrap_or_else(|| PathBuf::from(format!("ivid_{video_stem}")));
+    let use_temp = cli.temp_dir;
+    
+    let output_dir = if use_temp {
+        generate_temp_dir()
+    } else {
+        cli.output
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(format!("ivid_{video_stem}")))
+    };
 
     let start_secs = match &cli.start {
         Some(s) => Some(time::parse_hhmmss(s)?),
@@ -79,7 +89,10 @@ fn run(cli: Cli) -> Result<(), String> {
 
     // For CLI, default output directory (ivid_<video_stem>) is always auto-created (mkdir = true).
     // User-specified output requires either mkdir flag or output_dir to already exist.
-    let mkdir = if !user_specified_output {
+    // If temp_dir is selected, mkdir is always true.
+    let mkdir = if use_temp {
+        true
+    } else if !cli.output.is_some() {
         true
     } else {
         cli.mkdir

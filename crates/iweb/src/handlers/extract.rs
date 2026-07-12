@@ -17,6 +17,7 @@ pub struct ExtractForm {
     output: Option<String>,
     mkdir: Option<String>,
     force: Option<String>,
+    use_temp: Option<String>,
 }
 
 #[derive(Template)]
@@ -67,13 +68,16 @@ pub async fn extract(Form(form): Form<ExtractForm>) -> Result<Html<String>, Html
         .and_then(|s| s.to_str())
         .unwrap_or("video");
 
-    let output_dir = if let Some(ref out) = form.output.filter(|o| !o.trim().is_empty()) {
+    let use_temp = form.use_temp.is_some();
+    let output_dir = if use_temp {
+        ivid::extract::generate_temp_dir()
+    } else if let Some(ref out) = form.output.filter(|o| !o.trim().is_empty()) {
         PathBuf::from(out.trim())
     } else {
         PathBuf::from(format!("ivid_{video_stem}"))
     };
 
-    let mkdir = form.mkdir.is_some();
+    let mkdir = form.mkdir.is_some() || use_temp;
     let force = form.force.is_some();
 
     let config = ivid::extract::ExtractConfig {

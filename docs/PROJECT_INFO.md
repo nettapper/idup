@@ -181,10 +181,10 @@ Routes:
 | `GET /api/info` | `info` | pHash + SHA-256 for a single file |
 | `GET /api/random` | `random` | N seeded-random paths; includes "View All in Browser" button linking to `/explore` |
 | `GET /api/image` | `image_file` | Serve a local image by absolute path (DB-gated) |
-| GET /explore | explore | Unified standalone image browser; accepts ?dir=, ?filter=, ?hash=, or ?seed=&n= |
-| POST /api/clean | clean | Wipe all data from the database (images, hashes, partial hashes) |
-| POST /api/explore/delete | explore_delete | Delete multiple selected images on disk and DB |
-| POST /api/explore/move | explore_move | Move multiple selected images on disk and DB (supports rename, overwrite, skip) |
+| `GET /explore` | `explore` | Unified standalone image browser; accepts ?dir=, ?filter=, ?hash=, or ?seed=&n= |
+| `POST /api/clean` | `clean` | Wipe all data from the database (images, hashes, partial hashes) |
+| `POST /api/explore/delete` | `explore_delete` | Delete multiple selected images on disk and DB |
+| `POST /api/explore/move` | `explore_move` | Move multiple selected images on disk and DB (supports rename, overwrite, skip) |
 
 ---
 
@@ -220,16 +220,17 @@ ivid <VIDEO> [OPTIONS]
 | `--interval-mode` | `time\|frame` | `time` | Whether `--interval` is in seconds or frames |
 | `--start` | `HH:MM:SS` | `00:00:00` | Start time for extraction |
 | `--stop` | `HH:MM:SS` | *(end of video)* | Stop time for extraction |
-| `--output`, `-o` | `path` | `./ivid_<video_stem>/` | Output directory for extracted frames |
-| `--mkdir` | flag | off | Create the output directory if it doesn't exist |
-| `--force` | flag | off | Overwrite existing output files |
+| `--output`, `-o` | `path` | `./ivid_<video_stem>/` | Output directory for extracted frames (mutually exclusive with `--temp-dir`) |
+| `--temp-dir` | `flag` | `off` | Use a randomly named temporary directory under `/tmp/nettapper/ivid/extract/<timestamp>` (forces `--mkdir = true`, mutually exclusive with `--output`) |
+| `--mkdir` | `flag` | `off` | Create the output directory if it doesn't exist |
+| `--force` | `flag` | `off` | Overwrite existing output files |
 
 ## Web UI Features
 
 The `iweb` binary starts a local HTTP server. The UI has panels for each CLI operation (scan, video, dups, info, random, explore) plus image viewing:
 
 - **Scan panel**: Enter a directory path and options to scan images into the database.
-- **Video panel**: Extract frames from a video file using ivid. Displays a "Scan these frames" button which navigates to the scan panel with parameters pre-filled.
+- **Video panel**: Extract frames from a video file using ivid. Supports custom output directories as well as auto-generated temporary directories under `/tmp/nettapper/ivid/extract/<timestamp>` to prevent conflicts. Displays a "Scan these frames" button which navigates to the scan panel with parameters pre-filled.
 - **Dups panel**: Shows exact duplicate groups along with small preview thumbnails of each file. Each duplicate group header is a clickable link that opens `/explore?hash=<hash>` in a new browser tab.
 - **Random panel**: After fetching results, a "View All in Browser" button links to `/explore?seed=<seed>&n=<n>&filter=<filter>`, allowing deterministic replay of the exact same random selection.
 - **Clean panel**: Wipes the entire database. A browser `confirm()` dialog (via htmx `hx-confirm`) prompts the user before the request is sent.

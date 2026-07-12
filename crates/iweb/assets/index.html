@@ -114,9 +114,13 @@
       </div>
       <label>
         Output dir <span class="muted" style="font-size:0.8em">(optional)</span>
-        <input type="text" name="output" placeholder="/home/user/Photos/extracted" />
+        <input type="text" name="output" id="output-dir-input" placeholder="/home/user/Photos/extracted" />
       </label>
       <div class="form-row checkbox-row" style="gap:1.5rem;margin-top:0.5rem">
+        <label class="checkbox-label">
+          <input type="checkbox" name="use_temp" id="use-temp-checkbox" value="true" onchange="document.getElementById('output-dir-input').disabled = this.checked;" />
+          Use temp dir
+        </label>
         <label class="checkbox-label">
           <input type="checkbox" name="mkdir" value="true" checked />
           Create dir

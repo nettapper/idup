@@ -21,6 +21,15 @@ pub struct ExtractConfig {
     pub mkdir: bool,
 }
 
+/// Generate a unique temporary directory path under `/tmp/nettapper/ivid/extract/<timestamp>`.
+pub fn generate_temp_dir() -> PathBuf {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    PathBuf::from(format!("/tmp/nettapper/ivid/extract/{}", now))
+}
+
 pub struct ExtractResult {
     pub frame_count: usize,
     pub output_dir: PathBuf,
