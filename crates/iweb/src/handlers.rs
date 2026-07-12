@@ -618,6 +618,8 @@ fn build_explore_page(
     out.push_str(&breadcrumb_html);
     out.push_str(&content_html);
     out.push_str(EXPLORE_MODAL_HTML);
+    out.push_str(EXPLORE_SELECTION_BAR_HTML);
+    out.push_str(EXPLORE_MOVE_MODAL_HTML);
     out.push_str(EXPLORE_SCRIPT);
     out.push_str("</body>\n</html>\n");
     out
@@ -713,7 +715,7 @@ fn build_explore_content(
                 .unwrap_or_default();
             let img_src = format!("/api/image?path={}", url_encode(p));
             out.push_str(&format!(
-                "      <div class=\"card\" data-path=\"{dp}\" data-dir=\"{dd}\" data-img-src=\"{ds}\"><div class=\"card-img\"><img src=\"{src}\" loading=\"lazy\" alt=\"{alt}\" /></div><p class=\"name\" title=\"{pt}\">{fn_}</p></div>\n",
+                "      <div class=\"card\" data-path=\"{dp}\" data-dir=\"{dd}\" data-img-src=\"{ds}\"><div class=\"card-checkbox-container\"><input type=\"checkbox\" class=\"card-checkbox\" data-path=\"{dp}\" /></div><div class=\"card-img\"><img src=\"{src}\" loading=\"lazy\" alt=\"{alt}\" /></div><p class=\"name\" title=\"{pt}\">{fn_}</p></div>\n",
                 dp  = esc(p),
                 dd  = esc(&parent_dir),
                 ds  = esc(&img_src),
@@ -970,6 +972,143 @@ const EXPLORE_CSS: &str = r#"
     .modal-btn.secondary { border-color: #2d3148; color: #64748b; }
     .modal-btn.secondary:hover { background: #2d3148; color: #e2e8f0; }
 
+    /* Selection & Checkbox styles */
+    .card {
+      position: relative;
+    }
+    .card-checkbox-container {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      z-index: 10;
+      opacity: 0;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      transform: scale(0.9);
+    }
+    .card:hover .card-checkbox-container,
+    .card.selected .card-checkbox-container {
+      opacity: 1;
+      transform: scale(1);
+    }
+    .card-checkbox {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid #64748b;
+      background: #1a1d27;
+      cursor: pointer;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    .card-checkbox:hover {
+      border-color: #a78bfa;
+    }
+    .card-checkbox:checked {
+      background: #7c6af7;
+      border-color: #7c6af7;
+    }
+    .card-checkbox:checked::after {
+      content: "";
+      width: 6px;
+      height: 10px;
+      border: solid white;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+      position: absolute;
+      top: 2px;
+      left: 5px;
+    }
+    .card.selected {
+      border-color: #7c6af7;
+      box-shadow: 0 0 12px rgba(124, 106, 247, 0.3);
+      transform: scale(0.98);
+      transition: all 0.2s ease;
+    }
+    .selection-bar {
+      position: fixed;
+      bottom: -100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(26, 29, 39, 0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(124, 106, 247, 0.3);
+      border-radius: 40px;
+      padding: 0.8rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(124, 106, 247, 0.15);
+      transition: bottom 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 90;
+      max-width: 90%;
+    }
+    .selection-bar.active {
+      bottom: 30px;
+    }
+    .selection-count {
+      font-size: 0.85rem;
+      color: #e2e8f0;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .selection-actions {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+    }
+    .selection-btn {
+      background: #232736;
+      color: #cbd5e1;
+      border: 1px solid #334155;
+      border-radius: 20px;
+      padding: 0.45rem 1.1rem;
+      font-size: 0.78rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s ease;
+    }
+    .selection-btn:hover {
+      background: #2d3247;
+      color: #fff;
+      border-color: #475569;
+    }
+    .selection-btn.primary {
+      background: #7c6af7;
+      color: #fff;
+      border-color: #7c6af7;
+      box-shadow: 0 2px 6px rgba(124, 106, 247, 0.3);
+    }
+    .selection-btn.primary:hover {
+      background: #6b5ee0;
+      box-shadow: 0 4px 12px rgba(124, 106, 247, 0.5);
+      transform: translateY(-1px);
+    }
+    .selection-btn.danger {
+      background: #ef4444;
+      color: #fff;
+      border-color: #ef4444;
+      box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
+    }
+    .selection-btn.danger:hover {
+      background: #dc2626;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
+      transform: translateY(-1px);
+    }
+    .selection-btn:active {
+      transform: translateY(1px);
+    }
+
     /* Crop Mode styles */
     .crop-workspace {
       display: none;
@@ -1072,6 +1211,52 @@ const EXPLORE_CSS: &str = r#"
       gap: 0.5rem;
     }
 "#;
+
+const EXPLORE_SELECTION_BAR_HTML: &str = r##"
+  <div class="selection-bar" id="selection-bar">
+    <span class="selection-count" id="selection-count">0 items selected</span>
+    <div class="selection-actions">
+      <button class="selection-btn" id="select-all-btn">Select All</button>
+      <button class="selection-btn" id="deselect-all-btn">Deselect All</button>
+      <button class="selection-btn primary" id="move-btn">Move</button>
+      <button class="selection-btn danger" id="delete-btn">Delete</button>
+    </div>
+  </div>
+"##;
+
+const EXPLORE_MOVE_MODAL_HTML: &str = r##"
+  <div class="modal-overlay" id="move-modal" role="dialog" aria-modal="true">
+    <div class="modal-box" style="max-width: 500px; height: auto; max-height: 90vh;">
+      <div class="modal-header">
+        <span class="modal-title" style="font-weight: bold; color: #e2e8f0;">Move Selected Files</span>
+        <button class="modal-close" id="move-modal-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <label for="move-dest-path" style="font-size: 0.8rem; color: #94a3b8;">Destination Directory Path:</label>
+          <input type="text" id="move-dest-path" placeholder="/path/to/destination" style="background: #0f1117; border: 1px solid #2d3148; border-radius: 4px; color: #e2e8f0; font-family: inherit; font-size: 0.85rem; padding: 0.5rem;" />
+        </div>
+        <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+          <input type="checkbox" id="move-auto-create" checked style="width: 16px; height: 16px; accent-color: #7c6af7;" />
+          <label for="move-auto-create" style="font-size: 0.85rem; color: #94a3b8; cursor: pointer;">Auto-create directory if it doesn't exist</label>
+        </div>
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 0.4rem;">
+          <label for="move-collision" style="font-size: 0.8rem; color: #94a3b8;">On Filename Collision:</label>
+          <select id="move-collision" style="background: #0f1117; border: 1px solid #2d3148; border-radius: 4px; color: #e2e8f0; font-family: inherit; font-size: 0.85rem; padding: 0.5rem; outline: none; width: 100%;">
+            <option value="rename">Rename (append numeric suffix)</option>
+            <option value="overwrite">Overwrite existing files</option>
+            <option value="skip">Skip files</option>
+          </select>
+        </div>
+        <div id="move-error" style="color: #ef4444; font-size: 0.78rem; display: none; white-space: pre-wrap; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); padding: 0.5rem; border-radius: 4px;"></div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 0.5rem; border-top: 1px solid #2d3148; padding: 0.75rem 1rem;">
+        <button id="move-cancel-btn" class="modal-btn secondary">Cancel</button>
+        <button id="move-confirm-btn" class="modal-btn">Move Files</button>
+      </div>
+    </div>
+  </div>
+"##;
 
 const EXPLORE_MODAL_HTML: &str = r##"  <div class="modal-overlay" id="modal" role="dialog" aria-modal="true">
     <div class="modal-box">
@@ -1207,7 +1392,28 @@ const EXPLORE_SCRIPT: &str = r#"  <script>
     });
 
     document.querySelectorAll('.card').forEach(card => {
-      card.addEventListener('click', () => openModal(card));
+      const cb = card.querySelector('.card-checkbox');
+      if (cb) {
+        cb.addEventListener('click', e => {
+          e.stopPropagation();
+          toggleCardSelection(card, cb.checked);
+        });
+      }
+
+      card.addEventListener('click', e => {
+        if (e.shiftKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleRangeSelection(card);
+          return;
+        }
+
+        if (e.target.closest('.card-checkbox-container')) {
+          return;
+        }
+
+        openModal(card);
+      });
     });
 
     document.getElementById('modal-close').addEventListener('click', () => closeModal(false));
@@ -1735,6 +1941,194 @@ const EXPLORE_SCRIPT: &str = r#"  <script>
         alert('Error saving crop: ' + err);
       });
     });
+
+    // ── Multi-file Selection & Actions ─────────────────────────────────────────
+    let lastSelectedCard = null;
+
+    function toggleCardSelection(card, isSelected) {
+      const cb = card.querySelector('.card-checkbox');
+      if (cb) cb.checked = isSelected;
+      if (isSelected) {
+        card.classList.add('selected');
+      } else {
+        card.classList.remove('selected');
+      }
+      lastSelectedCard = card;
+      updateSelectionBar();
+    }
+
+    function handleRangeSelection(targetCard) {
+      if (!lastSelectedCard || lastSelectedCard === targetCard) {
+        const cb = targetCard.querySelector('.card-checkbox');
+        if (cb) {
+          toggleCardSelection(targetCard, !cb.checked);
+        }
+        return;
+      }
+
+      const idxStart = cards.indexOf(lastSelectedCard);
+      const idxEnd = cards.indexOf(targetCard);
+      if (idxStart === -1 || idxEnd === -1) return;
+
+      const min = Math.min(idxStart, idxEnd);
+      const max = Math.max(idxStart, idxEnd);
+
+      const targetCb = targetCard.querySelector('.card-checkbox');
+      const targetState = targetCb ? !targetCb.checked : true;
+
+      for (let i = min; i <= max; i++) {
+        toggleCardSelection(cards[i], targetState);
+      }
+      lastSelectedCard = targetCard;
+    }
+
+    const selectionBar = document.getElementById('selection-bar');
+    const selectionCount = document.getElementById('selection-count');
+    const selectAllBtn = document.getElementById('select-all-btn');
+    const deselectAllBtn = document.getElementById('deselect-all-btn');
+    const moveBtn = document.getElementById('move-btn');
+    const deleteBtn = document.getElementById('delete-btn');
+
+    function updateSelectionBar() {
+      const selectedCards = cards.filter(c => c.classList.contains('selected'));
+      const count = selectedCards.length;
+      if (count > 0) {
+        selectionCount.textContent = `${count} image${count === 1 ? '' : 's'} selected`;
+        selectionBar.classList.add('active');
+      } else {
+        selectionBar.classList.remove('active');
+      }
+    }
+
+    if (selectAllBtn) {
+      selectAllBtn.addEventListener('click', () => {
+        cards.forEach(c => toggleCardSelection(c, true));
+      });
+    }
+
+    if (deselectAllBtn) {
+      deselectAllBtn.addEventListener('click', () => {
+        cards.forEach(c => toggleCardSelection(c, false));
+      });
+    }
+
+    // Move Modal Elements & Logic
+    const moveModal = document.getElementById('move-modal');
+    const moveModalClose = document.getElementById('move-modal-close');
+    const moveCancelBtn = document.getElementById('move-cancel-btn');
+    const moveConfirmBtn = document.getElementById('move-confirm-btn');
+    const moveDestPath = document.getElementById('move-dest-path');
+    const moveAutoCreate = document.getElementById('move-auto-create');
+    const moveCollision = document.getElementById('move-collision');
+    const moveError = document.getElementById('move-error');
+
+    function openMoveModal() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const currentDir = urlParams.get('dir') || '';
+      moveDestPath.value = currentDir;
+      
+      moveError.style.display = 'none';
+      moveError.textContent = '';
+      moveModal.classList.add('open');
+    }
+
+    function closeMoveModal() {
+      moveModal.classList.remove('open');
+    }
+
+    if (moveBtn) {
+      moveBtn.addEventListener('click', openMoveModal);
+    }
+    if (moveModalClose) {
+      moveModalClose.addEventListener('click', closeMoveModal);
+    }
+    if (moveCancelBtn) {
+      moveCancelBtn.addEventListener('click', closeMoveModal);
+    }
+
+    moveModal.addEventListener('click', e => {
+      if (e.target === moveModal) closeMoveModal();
+    });
+
+    if (moveConfirmBtn) {
+      moveConfirmBtn.addEventListener('click', async () => {
+        const selectedCards = cards.filter(c => c.classList.contains('selected'));
+        const count = selectedCards.length;
+        if (count === 0) return;
+
+        const dest = moveDestPath.value.trim();
+        if (!dest) {
+          moveError.textContent = 'Please enter a destination directory path.';
+          moveError.style.display = 'block';
+          return;
+        }
+
+        moveError.style.display = 'none';
+        moveConfirmBtn.disabled = true;
+        moveConfirmBtn.textContent = 'Moving...';
+
+        const paths = selectedCards.map(c => c.dataset.path);
+
+        try {
+          const resp = await fetch('/api/explore/move', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              paths,
+              destination_dir: dest,
+              auto_create: moveAutoCreate.checked,
+              collision_behavior: moveCollision.value
+            })
+          });
+          
+          const result = await resp.json();
+          if (result.success) {
+            alert(result.message);
+            closeMoveModal();
+            window.location.reload();
+          } else {
+            moveError.textContent = result.message;
+            moveError.style.display = 'block';
+          }
+        } catch (err) {
+          moveError.textContent = `Request failed: ${err}`;
+          moveError.style.display = 'block';
+        } finally {
+          moveConfirmBtn.disabled = false;
+          moveConfirmBtn.textContent = 'Move Files';
+        }
+      });
+    }
+
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', async () => {
+        const selectedCards = cards.filter(c => c.classList.contains('selected'));
+        const count = selectedCards.length;
+        if (count === 0) return;
+
+        const confirmMsg = `Are you sure you want to permanently delete the ${count} selected file(s) from disk and database?`;
+        if (!confirm(confirmMsg)) return;
+
+        const paths = selectedCards.map(c => c.dataset.path);
+        
+        try {
+          const resp = await fetch('/api/explore/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paths })
+          });
+          const result = await resp.json();
+          if (result.success) {
+            alert(result.message);
+            window.location.reload();
+          } else {
+            alert(`Error: ${result.message}`);
+          }
+        } catch (err) {
+          alert(`Failed to delete: ${err}`);
+        }
+      });
+    }
   </script>
 "#;
 
@@ -1885,4 +2279,200 @@ pub async fn crop(
         img_src: Some(img_src),
     })
 }
+
+// ── Explore Delete & Move ─────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct DeleteRequest {
+    paths: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct DeleteResponse {
+    success: bool,
+    message: String,
+    deleted_count: usize,
+}
+
+pub async fn explore_delete(
+    State(pool): State<SqlitePool>,
+    Json(req): Json<DeleteRequest>,
+) -> Json<DeleteResponse> {
+    let mut deleted_count = 0;
+    let mut errors = Vec::new();
+    
+    for path_str in &req.paths {
+        let path = Path::new(path_str);
+        if path.exists() {
+            if let Err(e) = tokio::fs::remove_file(path).await {
+                errors.push(format!("Failed to delete file {}: {}", path_str, e));
+                continue;
+            }
+        }
+        if let Err(e) = idup::db::delete_image(&pool, path_str).await {
+            errors.push(format!("Failed to remove from DB {}: {}", path_str, e));
+        } else {
+            deleted_count += 1;
+        }
+    }
+    
+    let success = errors.is_empty();
+    let message = if success {
+        format!("Successfully deleted {} file(s).", deleted_count)
+    } else {
+        format!(
+            "Deleted {} file(s) with errors:\n{}",
+            deleted_count,
+            errors.join("\n")
+        )
+    };
+    
+    Json(DeleteResponse {
+        success,
+        message,
+        deleted_count,
+    })
+}
+
+#[derive(Deserialize)]
+pub struct MoveRequest {
+    paths: Vec<String>,
+    destination_dir: String,
+    auto_create: bool,
+    collision_behavior: String, // "rename", "overwrite", "skip"
+}
+
+#[derive(Serialize)]
+pub struct MoveResponse {
+    success: bool,
+    message: String,
+    moved_count: usize,
+    skipped_count: usize,
+    errors: Vec<String>,
+}
+
+pub async fn explore_move(
+    State(pool): State<SqlitePool>,
+    Json(req): Json<MoveRequest>,
+) -> Json<MoveResponse> {
+    let dest_dir = Path::new(&req.destination_dir);
+    
+    if !dest_dir.exists() {
+        if req.auto_create {
+            if let Err(e) = tokio::fs::create_dir_all(dest_dir).await {
+                return Json(MoveResponse {
+                    success: false,
+                    message: format!("Failed to create destination directory: {}", e),
+                    moved_count: 0,
+                    skipped_count: 0,
+                    errors: vec![e.to_string()],
+                });
+            }
+        } else {
+            return Json(MoveResponse {
+                success: false,
+                message: format!("Destination directory does not exist: {}", req.destination_dir),
+                moved_count: 0,
+                skipped_count: 0,
+                errors: vec!["Directory does not exist".to_string()],
+            });
+        }
+    } else if !dest_dir.is_dir() {
+        return Json(MoveResponse {
+            success: false,
+            message: format!("Destination path is not a directory: {}", req.destination_dir),
+            moved_count: 0,
+            skipped_count: 0,
+            errors: vec!["Not a directory".to_string()],
+        });
+    }
+
+    let mut moved_count = 0;
+    let mut skipped_count = 0;
+    let mut errors = Vec::new();
+
+    for path_str in &req.paths {
+        let old_path = Path::new(path_str);
+        if !old_path.exists() {
+            errors.push(format!("Source file does not exist: {}", path_str));
+            continue;
+        }
+
+        let filename = match old_path.file_name() {
+            Some(name) => name,
+            None => {
+                errors.push(format!("Invalid source path: {}", path_str));
+                continue;
+            }
+        };
+
+        let mut dest_path = dest_dir.join(filename);
+
+        if dest_path.exists() {
+            match req.collision_behavior.as_str() {
+                "skip" => {
+                    skipped_count += 1;
+                    continue;
+                }
+                "overwrite" => {}
+                "rename" => {
+                    let stem = dest_path.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
+                    let ext = dest_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                    let mut counter = 1;
+                    loop {
+                        let new_name = if ext.is_empty() {
+                            format!("{}_{}", stem, counter)
+                        } else {
+                            format!("{}_{}.{}", stem, counter, ext)
+                        };
+                        let candidate = dest_dir.join(new_name);
+                        if !candidate.exists() {
+                            dest_path = candidate;
+                            break;
+                        }
+                        counter += 1;
+                    }
+                }
+                _ => {
+                    errors.push(format!("Unknown collision behavior: {}", req.collision_behavior));
+                    continue;
+                }
+            }
+        }
+
+        let dest_path_str = dest_path.to_string_lossy().to_string();
+
+        if let Err(e) = tokio::fs::rename(old_path, &dest_path).await {
+            errors.push(format!("Failed to move file on disk from {} to {}: {}", path_str, dest_path_str, e));
+            continue;
+        }
+
+        if let Err(e) = idup::db::rename_image_path(&pool, path_str, &dest_path_str).await {
+            errors.push(format!("Failed to update database for {} -> {}: {}", path_str, dest_path_str, e));
+        } else {
+            moved_count += 1;
+        }
+    }
+
+    let success = errors.is_empty();
+    let message = if success {
+        format!("Successfully moved {} file(s) ({} skipped).", moved_count, skipped_count)
+    } else {
+        format!(
+            "Moved {} file(s) ({} skipped) with errors:\n{}",
+            moved_count,
+            skipped_count,
+            errors.join("\n")
+        )
+    };
+
+    Json(MoveResponse {
+        success,
+        message,
+        moved_count,
+        skipped_count,
+        errors,
+    })
+}
+
 

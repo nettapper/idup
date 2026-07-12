@@ -479,6 +479,39 @@ pub async fn delete_image(pool: &SqlitePool, path: &str) -> Result<(), sqlx::Err
     Ok(())
 }
 
+/// Update the path of an image in the database. If the destination path already exists
+/// in the database, it will be deleted first to avoid UNIQUE constraint violations.
+pub async fn rename_image_path(pool: &SqlitePool, old_path: &str, new_path: &str) -> Result<(), sqlx::Error> {
+    let old_normalized = normalize_path(Path::new(old_path));
+    let new_normalized = normalize_path(Path::new(new_path));
+    
+    let mut tx = pool.begin().await?;
+    
+    // Delete new_path from database if it exists to prevent UNIQUE constraint violation
+    query("DELETE FROM partial_hashes WHERE images_id IN (SELECT images_id FROM images WHERE path = ?)")
+        .bind(&new_normalized)
+        .execute(&mut *tx)
+        .await?;
+    query("DELETE FROM hashes WHERE images_id IN (SELECT images_id FROM images WHERE path = ?)")
+        .bind(&new_normalized)
+        .execute(&mut *tx)
+        .await?;
+    query("DELETE FROM images WHERE path = ?")
+        .bind(&new_normalized)
+        .execute(&mut *tx)
+        .await?;
+        
+    // Update old_path to new_path
+    query("UPDATE images SET path = ? WHERE path = ?")
+        .bind(&new_normalized)
+        .bind(&old_normalized)
+        .execute(&mut *tx)
+        .await?;
+        
+    tx.commit().await?;
+    Ok(())
+}
+
 async fn existing_image_id(conn: &mut SqliteConnection, path: &str) -> Result<Option<i64>, sqlx::Error> {
     query_as::<_, (i64,)>("SELECT images_id FROM images WHERE path = ?")
         .bind(path)
@@ -749,6 +782,69 @@ mod tests {
         // Check if hashes were cleared. If it failed to normalize/match, the count will still be 1 (hashes not deleted).
         let hash_count: i64 = query_scalar("SELECT COUNT(*) FROM hashes").fetch_one(&pool).await?;
         assert_eq!(hash_count, 0); // This will fail because relative_path fails to canonicalize to the same string!
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_rename_image_path() -> sqlx::Result<()> {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await?;
+
+        setup_db(&pool).await?;
+
+        let old_path = "/tmp/old_image.jpg";
+        let new_path = "/tmp/new_image.jpg";
+
+        let hash = ImgHash {
+            path: PathBuf::from(old_path),
+            kind: ImgHashKind::Sha256("imgdata".to_string()),
+            hash: "11112222".to_string(),
+        };
+
+        save(&pool, &hash).await?;
+
+        // Verify old path exists in DB and new doesn't
+        assert!(path_exists_in_db(&pool, old_path).await?);
+        assert!(!path_exists_in_db(&pool, new_path).await?);
+
+        // Rename path
+        rename_image_path(&pool, old_path, new_path).await?;
+
+        // Verify old path is gone and new path exists in DB
+        assert!(!path_exists_in_db(&pool, old_path).await?);
+        assert!(path_exists_in_db(&pool, new_path).await?);
+
+        // Verify hashes are preserved and transferred to the new path
+        let hash_count: i64 = query_scalar("SELECT COUNT(*) FROM hashes WHERE images_id = (SELECT images_id FROM images WHERE path = ?)")
+            .bind(new_path)
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(hash_count, 1);
+
+        // Now test collision: save another image at old_path
+        let hash2 = ImgHash {
+            path: PathBuf::from(old_path),
+            kind: ImgHashKind::Sha256("imgdata".to_string()),
+            hash: "33334444".to_string(),
+        };
+        save(&pool, &hash2).await?;
+
+        // Currently we have old_path (hash 33334444) and new_path (hash 11112222)
+        // If we rename old_path to new_path, it should delete the existing new_path first
+        rename_image_path(&pool, old_path, new_path).await?;
+
+        // Verify only new_path exists and has the new hash
+        assert!(!path_exists_in_db(&pool, old_path).await?);
+        assert!(path_exists_in_db(&pool, new_path).await?);
+        
+        let final_hash: String = query_scalar("SELECT hash FROM hashes WHERE images_id = (SELECT images_id FROM images WHERE path = ?)")
+            .bind(new_path)
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(final_hash, "33334444");
 
         Ok(())
     }

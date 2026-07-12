@@ -171,8 +171,10 @@ Routes:
 | `GET /api/info` | `info` | pHash + SHA-256 for a single file |
 | `GET /api/random` | `random` | N seeded-random paths; includes "View All in Browser" button linking to `/explore` |
 | `GET /api/image` | `image_file` | Serve a local image by absolute path (DB-gated) |
-| `GET /explore` | `explore` | Unified standalone image browser; accepts `?dir=`, `?filter=`, `?hash=`, or `?seed=&n=` |
-| `POST /api/clean` | `clean` | Wipe all data from the database (images, hashes, partial hashes) |
+| GET /explore | explore | Unified standalone image browser; accepts ?dir=, ?filter=, ?hash=, or ?seed=&n= |
+| POST /api/clean | clean | Wipe all data from the database (images, hashes, partial hashes) |
+| POST /api/explore/delete | explore_delete | Delete multiple selected images on disk and DB |
+| POST /api/explore/move | explore_move | Move multiple selected images on disk and DB (supports rename, overwrite, skip) |
 
 ---
 
@@ -228,6 +230,10 @@ The `iweb` binary starts a local HTTP server. The UI has panels for each CLI ope
   - `?hash=<group_hash>` — shows all images in a duplicate group (used by the dups panel)
   - `?seed=<u64>&n=<u32>&filter=<glob>` — deterministic random N images (used by the random panel)
   - The page always shows a filter bar (dir + glob inputs) for in-page navigation without returning to the SPA.
+- **Multi-file Selection**: Select multiple images on the `/explore` page using custom circular checkboxes or Shift-clicking (performs range selection). A sleek, floating selection bar/toolbar appears when files are selected, providing options to:
+  - **Select All** / **Deselect All**
+  - **Move**: Opens a modal where the user can enter the destination directory path, toggle auto-creation of missing folders, and choose a collision behavior (Rename with numeric suffix, Overwrite, or Skip).
+  - **Delete**: Prompts the user with a confirmation dialog before permanently removing the selected files from disk and the database.
 - **Image serving** (`/api/image`): Serves local image files by absolute path. Access is gated: only paths tracked in the idup DB are served.
 - **Deep-linking and panel state**: The UI supports deep-linking via query parameters (e.g. `/?panel=scan&path=/some/dir&recursive=true&unzip=true&remove_archive=true`), automatically pre-filling the inputs and switching tabs on page load.
 
