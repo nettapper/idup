@@ -319,9 +319,12 @@
       return;
     }
 
-    // Standard click toggles selection
-    const cb = card.querySelector(`.vid2img-checkbox-${videoId}`);
-    toggleCardSelection(card, videoId, index, !cb.checked);
+    // Standard click opens full screen image preview in modal
+    event.preventDefault();
+    event.stopPropagation();
+    const imgSrc = card.querySelector('img').src;
+    const title = card.querySelector('.name').textContent.trim();
+    openVid2ImgModal(imgSrc, title, videoId, index);
   }
 
   function handleRangeSelection(targetCard, videoId, targetIndex) {
@@ -350,6 +353,12 @@
     lastSelectedCardMap[videoId] = targetCard;
   }
 
+  function selectAllFrames(videoId, isSelected) {
+    const cards = Array.from(document.querySelectorAll(`#vid-group-${videoId} .card`));
+    cards.forEach((card, i) => {
+      toggleCardSelection(card, videoId, i, isSelected);
+    });
+  }
 
   function updateVid2ImgSelection(videoId) {
     const checkboxes = document.querySelectorAll(`.vid2img-checkbox-${videoId}`);
@@ -365,7 +374,114 @@
     });
     document.getElementById(`sel-count-${videoId}`).textContent = selectedCount;
     document.getElementById(`btn-reextract-${videoId}`).disabled = (selectedCount === 0);
+    const removeBtn = document.getElementById(`btn-reextract-remove-${videoId}`);
+    if (removeBtn) {
+      removeBtn.disabled = (selectedCount === 0);
+    }
   }
+
+  let currentVideoId = null;
+  let currentFrameIndex = -1;
+
+  function openVid2ImgModal(imgSrc, title, videoId, index) {
+    currentVideoId = videoId;
+    currentFrameIndex = index;
+    
+    const modal = document.getElementById('vid2img-modal');
+    const modalImg = document.getElementById('vid2img-modal-img');
+    const modalTitle = document.getElementById('vid2img-modal-title');
+    const modalCb = document.getElementById('vid2img-modal-checkbox');
+    
+    modalImg.src = imgSrc;
+    modalTitle.textContent = title;
+    
+    const card = document.querySelector(`#vid-group-${videoId} .card[data-index="${index}"]`);
+    if (card) {
+      const cb = card.querySelector(`.vid2img-checkbox-${videoId}`);
+      modalCb.checked = cb.checked;
+    }
+    
+    modal.classList.add('open');
+  }
+
+  function toggleModalFrameSelection() {
+    if (currentVideoId === null || currentFrameIndex === -1) return;
+    const card = document.querySelector(`#vid-group-${currentVideoId} .card[data-index="${currentFrameIndex}"]`);
+    if (card) {
+      const modalCb = document.getElementById('vid2img-modal-checkbox');
+      toggleCardSelection(card, currentVideoId, currentFrameIndex, modalCb.checked);
+    }
+  }
+
+  function changeVid2ImgModalFrame(direction) {
+    if (currentVideoId === null || currentFrameIndex === -1) return;
+    const cards = Array.from(document.querySelectorAll(`#vid-group-${currentVideoId} .card`));
+    const newIndex = currentFrameIndex + direction;
+    if (newIndex >= 0 && newIndex < cards.length) {
+      currentFrameIndex = newIndex;
+      const card = cards[newIndex];
+      const imgSrc = card.querySelector('img').src;
+      const title = card.querySelector('.name').textContent.trim();
+      
+      document.getElementById('vid2img-modal-img').src = imgSrc;
+      document.getElementById('vid2img-modal-title').textContent = title;
+      
+      const cb = card.querySelector(`.vid2img-checkbox-${currentVideoId}`);
+      document.getElementById('vid2img-modal-checkbox').checked = cb.checked;
+    }
+  }
+
+  function closeVid2ImgModal(event) {
+    if (event) {
+      if (event.target.id === 'vid2img-modal' || event.target.classList.contains('modal-close')) {
+        document.getElementById('vid2img-modal').classList.remove('open');
+      }
+    } else {
+      document.getElementById('vid2img-modal').classList.remove('open');
+    }
+  }
+
+  document.addEventListener('keydown', e => {
+    const modal = document.getElementById('vid2img-modal');
+    if (modal && modal.classList.contains('open')) {
+      if (e.key === 'Escape') {
+        closeVid2ImgModal(null);
+      } else if (e.key === 'ArrowRight') {
+        changeVid2ImgModalFrame(1);
+      } else if (e.key === 'ArrowLeft') {
+        changeVid2ImgModalFrame(-1);
+      }
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const imgArea = document.getElementById('vid2img-modal-img-area');
+    if (imgArea) {
+      imgArea.addEventListener('mousemove', e => {
+        const rect = imgArea.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const width = rect.width;
+        if (x < width * 0.25) {
+          imgArea.style.cursor = 'w-resize';
+        } else if (x > width * 0.75) {
+          imgArea.style.cursor = 'e-resize';
+        } else {
+          imgArea.style.cursor = 'default';
+        }
+      });
+
+      imgArea.addEventListener('click', e => {
+        const rect = imgArea.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const width = rect.width;
+        if (x < width * 0.25) {
+          changeVid2ImgModalFrame(-1);
+        } else if (x > width * 0.75) {
+          changeVid2ImgModalFrame(1);
+        }
+      });
+    }
+  });
 
   async function submitSaveForm(event, videoId) {
     event.preventDefault();
@@ -409,8 +525,8 @@
     }
   }
 
-  async function submitReextractForm(event, videoId) {
-    event.preventDefault();
+  async function submitReextractForm(event, videoId, removeOthers = false) {
+    if (event) event.preventDefault();
     const interval = parseFloat(document.getElementById(`interval-${videoId}`).value);
     
     const selectedIndexes = [];
@@ -429,13 +545,22 @@
     const body = {
       video_id: videoId,
       selected_indexes: selectedIndexes,
-      new_interval: interval
+      new_interval: interval,
+      remove_others: removeOthers
     };
     
     const btn = document.getElementById(`btn-reextract-${videoId}`);
+    const removeBtn = document.getElementById(`btn-reextract-remove-${videoId}`);
     const origText = btn.textContent;
-    btn.textContent = "Extracting...";
+    const origRemoveText = removeBtn ? removeBtn.textContent : "";
+    
     btn.disabled = true;
+    if (removeBtn) removeBtn.disabled = true;
+    if (removeOthers && removeBtn) {
+      removeBtn.textContent = "Processing...";
+    } else {
+      btn.textContent = "Extracting...";
+    }
     
     try {
       const response = await fetch('/api/vid2img/reextract', {
@@ -455,6 +580,10 @@
     } finally {
       btn.textContent = origText;
       btn.disabled = false;
+      if (removeBtn) {
+        removeBtn.textContent = origRemoveText;
+        removeBtn.disabled = false;
+      }
     }
   }
 
@@ -535,5 +664,23 @@
     window.history.replaceState({}, '', '/');
   }
 </script>
+  <!-- Vid2Img Image Modal -->
+  <div id="vid2img-modal" class="modal-overlay" onclick="closeVid2ImgModal(event)">
+    <div class="modal-box" style="position: relative; max-width: 90vw; max-height: 90vh; background: #1a1d27; border: 1px solid #2d3148; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;" onclick="event.stopPropagation()">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid #2d3148;">
+        <span id="vid2img-modal-title" style="font-size: 0.85rem; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%;">Image Preview</span>
+        <div style="display: flex; align-items: center; gap: 1.25rem;">
+            <label class="checkbox-label" style="font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; color: #cbd5e1; cursor: pointer; flex-direction: row; margin: 0; user-select: none;">
+                <input type="checkbox" id="vid2img-modal-checkbox" onchange="toggleModalFrameSelection()" style="width: 16px; height: 16px; accent-color: #7c6af7;" />
+                Selected
+            </label>
+            <button class="modal-close" onclick="closeVid2ImgModal(null)" style="background:none; border:none; color:#64748b; font-size:1.2rem; cursor:pointer;">&times;</button>
+        </div>
+      </div>
+      <div id="vid2img-modal-img-area" class="modal-img-area" style="flex: 1; display: flex; align-items: center; justify-content: center; background: #0f1117; padding: 1rem; min-height: 0; position: relative; user-select: none;">
+        <img id="vid2img-modal-img" src="" style="max-width: 100%; max-height: 80vh; object-fit: contain; pointer-events: none;" />
+      </div>
+    </div>
+  </div>
 </body>
 </html>

@@ -11,11 +11,15 @@
           Video location: <code>{{ review.video_path }}</code><br/>
           Destination: <code>{{ review.destination_dir }}</code>
       </p>
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+          <button type="button" onclick="selectAllFrames('{{ review.video_id }}', true)" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid #334155; background: #232736; color: #cbd5e1; cursor: pointer; font-family: inherit;">Select All</button>
+          <button type="button" onclick="selectAllFrames('{{ review.video_id }}', false)" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid #334155; background: #232736; color: #cbd5e1; cursor: pointer; font-family: inherit;">Deselect All</button>
+      </div>
 
       <!-- Grid of frames -->
       <div class="grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem;">
           {% for frame in review.frames %}
-          <div class="card" style="position: relative; display: flex; flex-direction: column;" onclick="handleCardClick(event, this, '{{ review.video_id }}', {{ loop.index0 }})">
+          <div class="card" data-index="{{ loop.index0 }}" data-path="{{ frame.path }}" style="position: relative; display: flex; flex-direction: column;" onclick="handleCardClick(event, this, '{{ review.video_id }}', {{ loop.index0 }})">
               <!-- Overlay Checkbox -->
               <div class="card-checkbox-container" style="opacity: 1; transform: scale(1);">
                   <input type="checkbox" class="card-checkbox vid2img-checkbox-{{ review.video_id }}" value="{{ loop.index0 }}" data-path="{{ frame.path }}" onclick="event.stopPropagation(); updateVid2ImgSelection('{{ review.video_id }}');" />
@@ -50,7 +54,10 @@
               <span style="font-size: 0.75rem; color: #94a3b8;">
                   Selected count: <strong id="sel-count-{{ review.video_id }}">0</strong>
               </span>
-              <button type="submit" id="btn-reextract-{{ review.video_id }}" disabled style="padding: 0.45rem 1rem; font-size: 0.8rem; background: #4b3fbc; align-self: flex-start;">Re-extract</button>
+              <div style="display: flex; gap: 0.5rem;">
+                  <button type="submit" id="btn-reextract-{{ review.video_id }}" disabled style="padding: 0.45rem 1rem; font-size: 0.8rem; background: #4b3fbc; align-self: flex-start; border: none; border-radius: 6px; color: #fff; cursor: pointer; font-family: inherit; font-weight: 600;">Re-extract</button>
+                  <button type="button" id="btn-reextract-remove-{{ review.video_id }}" disabled onclick="submitReextractForm(event, '{{ review.video_id }}', true)" style="padding: 0.45rem 1rem; font-size: 0.8rem; background: #7f1d1d; align-self: flex-start; border: none; border-radius: 6px; color: #fff; cursor: pointer; font-family: inherit; font-weight: 600;">Remove Others & Re-extract</button>
+              </div>
           </form>
       </div>
   </div>

@@ -192,6 +192,7 @@ pub struct ReextractRequest {
     video_id: String,
     selected_indexes: Vec<usize>,
     new_interval: f64,
+    remove_others: Option<bool>,
 }
 
 pub async fn reextract(Json(req): Json<ReextractRequest>) -> Result<Html<String>, Html<String>> {
@@ -288,19 +289,30 @@ pub async fn reextract(Json(req): Json<ReextractRequest>) -> Result<Html<String>
         }
     }
 
-    // Remove old selected frames on disk
+    let remove_others = req.remove_others.unwrap_or(false);
     let selected_set: std::collections::HashSet<usize> = req.selected_indexes.iter().cloned().collect();
-    for (i, frame) in metadata.frames.iter().enumerate() {
-        if selected_set.contains(&i) {
+
+    if remove_others {
+        // Remove ALL old frames on disk
+        for frame in &metadata.frames {
             tokio::fs::remove_file(&frame.path).await.ok();
+        }
+    } else {
+        // Remove only selected old frames on disk
+        for (i, frame) in metadata.frames.iter().enumerate() {
+            if selected_set.contains(&i) {
+                tokio::fs::remove_file(&frame.path).await.ok();
+            }
         }
     }
 
-    // Keep unselected old frames
+    // Keep unselected old frames if remove_others is false
     let mut combined_frames = Vec::new();
-    for (i, frame) in metadata.frames.into_iter().enumerate() {
-        if !selected_set.contains(&i) {
-            combined_frames.push(frame);
+    if !remove_others {
+        for (i, frame) in metadata.frames.into_iter().enumerate() {
+            if !selected_set.contains(&i) {
+                combined_frames.push(frame);
+            }
         }
     }
 
