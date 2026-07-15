@@ -10,6 +10,7 @@ pub mod list;
 pub mod random;
 pub mod scan;
 pub mod update;
+pub mod vid2img;
 
 // ── Shared Helpers ────────────────────────────────────────────────────────────
 

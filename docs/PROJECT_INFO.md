@@ -185,6 +185,12 @@ Routes:
 | `POST /api/clean` | `clean` | Wipe all data from the database (images, hashes, partial hashes) |
 | `POST /api/explore/delete` | `explore_delete` | Delete multiple selected images on disk and DB |
 | `POST /api/explore/move` | `explore_move` | Move multiple selected images on disk and DB (supports rename, overwrite, skip) |
+| `GET /api/vid2img/list` | `vid2img::list` | List active video reviews |
+| `GET /api/vid2img/check_dir` | `vid2img::check_dir` | Check if a local directory exists |
+| `POST /api/vid2img/upload` | `vid2img::upload` | Upload video(s) and extract initial frames |
+| `POST /api/vid2img/reextract` | `vid2img::reextract` | Re-extract frames from selected range(s) at finer interval |
+| `POST /api/vid2img/save` | `vid2img::save` | Save selected/all frames to destination and run background scan |
+| `POST /api/vid2img/delete` | `vid2img::delete` | Delete/discard active video review and files |
 
 ---
 
@@ -245,8 +251,9 @@ The `iweb` binary starts a local HTTP server. The UI has panels for each CLI ope
   - **Select All** / **Deselect All**
   - **Move**: Opens a modal where the user can enter the destination directory path, toggle auto-creation of missing folders, and choose a collision behavior (Rename with numeric suffix, Overwrite, or Skip).
   - **Delete**: Prompts the user with a confirmation dialog before permanently removing the selected files from disk and the database.
-- **Image serving** (`/api/image`): Serves local image files by absolute path. Access is gated: only paths tracked in the idup DB are served.
+- **Image serving** (`/api/image`): Serves local image files by absolute path. Access is gated: only paths tracked in the idup DB are served (or paths under the `/tmp/nettapper/vid2img/` directory for frame review).
 - **Deep-linking and panel state**: The UI supports deep-linking via query parameters (e.g. `/?panel=scan&path=/some/dir&recursive=true&unzip=true&remove_archive=true`), automatically pre-filling the inputs and switching tabs on page load.
+- **Vid2Img panel**: Allows uploading one or more videos, extracting frames into temporary directories, reviewing them in a grid, and either saving (moving them to a permanent directory and running an automatic background scan into the database) or selecting frame ranges to refine with sub-extraction at a finer interval.
 
 ---
 

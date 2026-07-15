@@ -1,5 +1,6 @@
 use axum::routing::{get, post};
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use tower_http::cors::CorsLayer;
 use crate::handlers;
 use crate::state::AppState;
@@ -21,7 +22,14 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/info", get(handlers::info::info))
         .route("/api/random", get(handlers::random::random))
         .route("/api/image", get(handlers::image::image_file))
+        .route("/api/vid2img/list", get(handlers::vid2img::list))
+        .route("/api/vid2img/check_dir", get(handlers::vid2img::check_dir))
+        .route("/api/vid2img/upload", post(handlers::vid2img::upload))
+        .route("/api/vid2img/reextract", post(handlers::vid2img::reextract))
+        .route("/api/vid2img/save", post(handlers::vid2img::save))
+        .route("/api/vid2img/delete", post(handlers::vid2img::delete))
         .route("/explore", get(handlers::explore::explore))
         .with_state(state)
+        .layer(DefaultBodyLimit::disable())
         .layer(CorsLayer::permissive())
 }

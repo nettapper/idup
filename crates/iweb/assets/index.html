@@ -19,6 +19,7 @@
   <a href="#" data-panel="random">random</a>
   <hr>
   <a href="#" data-panel="explore">explore</a>
+  <a href="#" data-panel="vid2img">vid2img</a>
   <hr>
   <a href="#" data-panel="clean">clean</a>
 </nav>
@@ -202,6 +203,29 @@
     </form>
   </section>
 
+  <!-- Vid2Img -->
+  <section id="panel-vid2img" class="panel">
+    <h2>Vid2Img (Extract & Review)</h2>
+    <p class="muted" style="margin-bottom:1rem">Upload one or more videos to extract frames into temporary directories, review, and save or refine.</p>
+    <form id="vid2img-upload-form" hx-post="/api/vid2img/upload" hx-target="#vid2img-list" hx-swap="innerHTML" hx-indicator="#vid2img-spinner" enctype="multipart/form-data">
+      <label>
+        Videos
+        <input type="file" name="videos" multiple accept="video/*" required />
+      </label>
+      <label>
+        Initial interval (seconds)
+        <input type="number" name="interval" value="1" step="any" min="0.001" required />
+      </label>
+      <label>
+        Save Destination Directory
+        <input type="text" name="destination_dir" placeholder="/home/user/Pictures/extracted_frames" required />
+      </label>
+      <button type="submit" style="margin-top:0.75rem">Upload & Extract</button>
+    </form>
+    <span id="vid2img-spinner" class="htmx-indicator">uploading and extracting…</span>
+    <div id="vid2img-list" hx-get="/api/vid2img/list" hx-trigger="load" hx-swap="innerHTML" class="result-box"></div>
+  </section>
+
   <!-- Random -->
   <section id="panel-random" class="panel">
     <h2>Random</h2>
@@ -258,6 +282,230 @@
       const target = link.dataset.panel;
       switchToPanel(target);
     });
+  });
+
+  // Vid2Img helpers
+  const lastSelectedCardMap = {};
+
+  function toggleCardSelection(card, videoId, index, isSelected) {
+    const cb = card.querySelector(`.vid2img-checkbox-${videoId}`);
+    cb.checked = isSelected;
+    if (isSelected) {
+      card.classList.add('selected');
+    } else {
+      card.classList.remove('selected');
+    }
+    updateVid2ImgSelection(videoId);
+    lastSelectedCardMap[videoId] = card;
+  }
+
+  function handleCardClick(event, card, videoId, index) {
+    if (event.target.closest('.card-checkbox-container')) {
+      return;
+    }
+
+    if (event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      handleRangeSelection(card, videoId, index);
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      const cb = card.querySelector(`.vid2img-checkbox-${videoId}`);
+      toggleCardSelection(card, videoId, index, !cb.checked);
+      return;
+    }
+
+    // Standard click toggles selection
+    const cb = card.querySelector(`.vid2img-checkbox-${videoId}`);
+    toggleCardSelection(card, videoId, index, !cb.checked);
+  }
+
+  function handleRangeSelection(targetCard, videoId, targetIndex) {
+    const lastCard = lastSelectedCardMap[videoId];
+    if (!lastCard || lastCard === targetCard) {
+      const cb = targetCard.querySelector(`.vid2img-checkbox-${videoId}`);
+      toggleCardSelection(targetCard, videoId, targetIndex, !cb.checked);
+      lastSelectedCardMap[videoId] = targetCard;
+      return;
+    }
+
+    const cards = Array.from(document.querySelectorAll(`#vid-group-${videoId} .card`));
+    const idxStart = cards.indexOf(lastCard);
+    const idxEnd = cards.indexOf(targetCard);
+    if (idxStart === -1 || idxEnd === -1) return;
+
+    const min = Math.min(idxStart, idxEnd);
+    const max = Math.max(idxStart, idxEnd);
+
+    const targetCb = targetCard.querySelector(`.vid2img-checkbox-${videoId}`);
+    const targetState = targetCb ? !targetCb.checked : true;
+
+    for (let i = min; i <= max; i++) {
+      toggleCardSelection(cards[i], videoId, i, targetState);
+    }
+    lastSelectedCardMap[videoId] = targetCard;
+  }
+
+
+  function updateVid2ImgSelection(videoId) {
+    const checkboxes = document.querySelectorAll(`.vid2img-checkbox-${videoId}`);
+    let selectedCount = 0;
+    checkboxes.forEach(cb => {
+      const card = cb.closest('.card');
+      if (cb.checked) {
+        selectedCount++;
+        card.classList.add('selected');
+      } else {
+        card.classList.remove('selected');
+      }
+    });
+    document.getElementById(`sel-count-${videoId}`).textContent = selectedCount;
+    document.getElementById(`btn-reextract-${videoId}`).disabled = (selectedCount === 0);
+  }
+
+  async function submitSaveForm(event, videoId) {
+    event.preventDefault();
+    const saveAll = document.getElementById(`save-all-${videoId}`).checked;
+    
+    const paths = [];
+    if (!saveAll) {
+      const checkboxes = document.querySelectorAll(`.vid2img-checkbox-${videoId}`);
+      checkboxes.forEach(cb => {
+        if (cb.checked) {
+          paths.push(cb.dataset.path);
+        }
+      });
+      if (paths.length === 0) {
+        alert("Please select at least one frame to save, or check 'Save all frames'.");
+        return;
+      }
+    }
+    
+    const body = {
+      video_id: videoId,
+      save_all: saveAll,
+      paths: paths
+    };
+    
+    try {
+      const response = await fetch('/api/vid2img/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (response.ok) {
+        const html = await response.text();
+        document.getElementById('vid2img-list').innerHTML = html;
+      } else {
+        const text = await response.text();
+        alert("Error saving frames: " + text);
+      }
+    } catch (e) {
+      alert("Error: " + e.message);
+    }
+  }
+
+  async function submitReextractForm(event, videoId) {
+    event.preventDefault();
+    const interval = parseFloat(document.getElementById(`interval-${videoId}`).value);
+    
+    const selectedIndexes = [];
+    const checkboxes = document.querySelectorAll(`.vid2img-checkbox-${videoId}`);
+    checkboxes.forEach(cb => {
+      if (cb.checked) {
+        selectedIndexes.push(parseInt(cb.value));
+      }
+    });
+    
+    if (selectedIndexes.length === 0) {
+      alert("Please select a range of frames.");
+      return;
+    }
+    
+    const body = {
+      video_id: videoId,
+      selected_indexes: selectedIndexes,
+      new_interval: interval
+    };
+    
+    const btn = document.getElementById(`btn-reextract-${videoId}`);
+    const origText = btn.textContent;
+    btn.textContent = "Extracting...";
+    btn.disabled = true;
+    
+    try {
+      const response = await fetch('/api/vid2img/reextract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (response.ok) {
+        const html = await response.text();
+        document.getElementById('vid2img-list').innerHTML = html;
+      } else {
+        const text = await response.text();
+        alert("Error re-extracting frames: " + text);
+      }
+    } catch (e) {
+      alert("Error: " + e.message);
+    } finally {
+      btn.textContent = origText;
+      btn.disabled = false;
+    }
+  }
+
+  async function deleteVideo(event, videoId) {
+    event.preventDefault();
+    if (!confirm("Are you sure you want to delete this video review session and all its temporary files?")) {
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append('video_id', videoId);
+    
+    try {
+      const response = await fetch('/api/vid2img/delete', {
+        method: 'POST',
+        body: new URLSearchParams(formData)
+      });
+      if (response.ok) {
+        const html = await response.text();
+        document.getElementById('vid2img-list').innerHTML = html;
+      } else {
+        const text = await response.text();
+        alert("Error deleting session: " + text);
+      }
+    } catch (e) {
+      alert("Error: " + e.message);
+    }
+  }
+
+  // Intercept the upload form submission to check destination directory existence
+  document.body.addEventListener('htmx:confirm', function(evt) {
+    if (evt.target.id === 'vid2img-upload-form') {
+      evt.preventDefault();
+      const destDir = document.querySelector('#panel-vid2img input[name="destination_dir"]').value.trim();
+      
+      fetch(`/api/vid2img/check_dir?path=${encodeURIComponent(destDir)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.exists) {
+            if (confirm(`The destination directory "${destDir}" does not exist. Do you want to create it?`)) {
+              evt.detail.issueRequest();
+            }
+          } else {
+            evt.detail.issueRequest();
+          }
+        })
+        .catch(err => {
+          console.error("Error checking destination directory:", err);
+          evt.detail.issueRequest(); // Proceed on error
+        });
+    }
   });
 
   // On page load, check for ?panel=...&path=...&recursive=...

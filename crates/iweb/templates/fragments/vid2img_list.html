@@ -1,0 +1,58 @@
+{% if reviews.is_empty() %}
+<p class="muted">No active video frame extractions in review. Upload some videos above to start!</p>
+{% else %}
+  {% for review in reviews %}
+  <div class="vid2img-video-group" id="vid-group-{{ review.video_id }}" style="margin-bottom: 2rem; border: 1px solid #2d3148; border-radius: 8px; padding: 1.5rem; background: #1a1d27;">
+      <h3 style="color: #a78bfa; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; font-size: 1rem;">
+          <span>{{ review.video_name }}</span>
+          <button type="button" class="btn-danger" onclick="deleteVideo(event, '{{ review.video_id }}')" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 4px; border: none; background: #7f1d1d; color: #fff; cursor: pointer; font-family: inherit;">Delete</button>
+      </h3>
+      <p class="muted" style="font-size: 0.75rem; margin-bottom: 1rem;">
+          Video location: <code>{{ review.video_path }}</code><br/>
+          Destination: <code>{{ review.destination_dir }}</code>
+      </p>
+
+      <!-- Grid of frames -->
+      <div class="grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem;">
+          {% for frame in review.frames %}
+          <div class="card" style="position: relative; display: flex; flex-direction: column;" onclick="handleCardClick(event, this, '{{ review.video_id }}', {{ loop.index0 }})">
+              <!-- Overlay Checkbox -->
+              <div class="card-checkbox-container" style="opacity: 1; transform: scale(1);">
+                  <input type="checkbox" class="card-checkbox vid2img-checkbox-{{ review.video_id }}" value="{{ loop.index0 }}" data-path="{{ frame.path }}" onclick="event.stopPropagation(); updateVid2ImgSelection('{{ review.video_id }}');" />
+              </div>
+              <div class="card-img" style="aspect-ratio: 1.33; overflow: hidden; background: #0f1117;">
+                  <img src="/api/image?path={{ frame.path }}" loading="lazy" alt="{{ frame.filename }}" style="width: 100%; height: 100%; object-fit: contain;" />
+              </div>
+              <p class="name" style="padding: 0.3rem 0.5rem; font-size: 0.7rem; color: #cbd5e1; text-align: center; border-top: 1px solid #2d3148;">
+                  {{ frame.formatted_time() }}
+              </p>
+          </div>
+          {% endfor %}
+      </div>
+
+      <!-- Actions for this video -->
+      <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: flex-start; padding-top: 1rem; border-top: 1px solid #2d3148;">
+          <!-- Save / Move Form -->
+          <form style="flex: 1; min-width: 250px; gap: 0.5rem; display: flex; flex-direction: column;" onsubmit="submitSaveForm(event, '{{ review.video_id }}')">
+              <label class="checkbox-label" style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <input type="checkbox" id="save-all-{{ review.video_id }}" />
+                  Save all frames (uncheck to save selected only)
+              </label>
+              <button type="submit" style="padding: 0.45rem 1rem; font-size: 0.8rem; align-self: flex-start;">Save Images</button>
+          </form>
+
+          <!-- Re-extract Form -->
+          <form style="flex: 1; min-width: 250px; gap: 0.5rem; display: flex; flex-direction: column;" onsubmit="submitReextractForm(event, '{{ review.video_id }}')">
+              <label style="font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.25rem;">
+                  Re-extract Selected Range(s) Interval (seconds):
+                  <input type="number" id="interval-{{ review.video_id }}" value="{{ review.last_interval * 0.5 }}" step="any" min="0.001" required style="padding: 0.35rem; width: 100px;" />
+              </label>
+              <span style="font-size: 0.75rem; color: #94a3b8;">
+                  Selected count: <strong id="sel-count-{{ review.video_id }}">0</strong>
+              </span>
+              <button type="submit" id="btn-reextract-{{ review.video_id }}" disabled style="padding: 0.45rem 1rem; font-size: 0.8rem; background: #4b3fbc; align-self: flex-start;">Re-extract</button>
+          </form>
+      </div>
+  </div>
+  {% endfor %}
+{% endif %}
