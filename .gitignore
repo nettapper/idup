@@ -6,3 +6,6 @@
 # perf
 flamegraph.svg
 perf.data
+
+# local testing extraction script & state
+/scripts/testing/
