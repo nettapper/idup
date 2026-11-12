@@ -9,6 +9,9 @@
 
     // Crop Editor Elements
     const cropBtn              = document.getElementById('modal-crop-btn');
+    const modalSelectBtn       = document.getElementById('modal-select-btn');
+    const modalSelectCb        = document.getElementById('modal-select-cb');
+    const modalSelectText      = document.getElementById('modal-select-text');
     const cropWorkspace        = document.querySelector('.crop-workspace');
     const viewerFooterControls = document.getElementById('viewer-footer-controls');
     const cropFooterControls   = document.getElementById('crop-footer-controls');
@@ -28,6 +31,21 @@
     const cropPad = 50;
     let cropDragState = { active: false, type: null, handle: null, startX: 0, startY: 0, boxStartX: 0, boxStartY: 0, boxStartW: 0, boxStartH: 0 };
 
+    function updateModalSelectionState() {
+      if (currentCardIndex < 0 || currentCardIndex >= cards.length) return;
+      const card = cards[currentCardIndex];
+      const isSelected = card.classList.contains('selected');
+      if (modalSelectCb) {
+        modalSelectCb.checked = isSelected;
+      }
+      if (modalSelectBtn) {
+        modalSelectBtn.classList.toggle('selected', isSelected);
+      }
+      if (modalSelectText) {
+        modalSelectText.textContent = isSelected ? 'Selected' : 'Select';
+      }
+    }
+
     function updateModalContent() {
       if (currentCardIndex < 0 || currentCardIndex >= cards.length) return;
       const card = cards[currentCardIndex];
@@ -40,6 +58,7 @@
       modalTitle.textContent = path;
       modalTitle.href        = '/explore?dir=' + encodeURIComponent(dir);
       modalOpen.href         = imgSrc;
+      updateModalSelectionState();
     }
 
     function showNext() {
@@ -81,7 +100,7 @@
       if (modal.classList.contains('open')) closeModal(true);
     });
 
-    document.querySelectorAll('.card').forEach(card => {
+    function bindCardEvents(card) {
       const cb = card.querySelector('.card-checkbox');
       if (cb) {
         cb.addEventListener('click', e => {
@@ -121,7 +140,18 @@
         lastSelectedCard = card;
         openModal(card);
       });
-    });
+    }
+
+    cards.forEach(bindCardEvents);
+
+    if (modalSelectCb) {
+      modalSelectCb.addEventListener('change', () => {
+        if (currentCardIndex < 0 || currentCardIndex >= cards.length) return;
+        const card = cards[currentCardIndex];
+        toggleCardSelection(card, modalSelectCb.checked);
+        modalSelectCb.blur();
+      });
+    }
 
     document.getElementById('modal-close').addEventListener('click', () => closeModal(false));
 
@@ -139,6 +169,14 @@
       } else if (e.key === 'ArrowLeft') {
         if (modal.classList.contains('crop-mode')) return;
         showPrev();
+      } else if (e.key === ' ' || e.code === 'Space') {
+        if (modal.classList.contains('crop-mode')) return;
+        e.preventDefault();
+        if (currentCardIndex >= 0 && currentCardIndex < cards.length) {
+          const card = cards[currentCardIndex];
+          const isSelected = card.classList.contains('selected');
+          toggleCardSelection(card, !isSelected);
+        }
       }
     });
 
@@ -636,8 +674,67 @@
         cropSaveBtn.disabled = false;
         cropSaveBtn.textContent = 'Save Crop';
         if (data.success) {
+          const newPath = data.new_path || path;
+          const baseImgSrc = data.img_src || card.dataset.imgSrc.split('&t=')[0];
+          const bustedImgSrc = baseImgSrc + (baseImgSrc.includes('?') ? '&' : '?') + 't=' + Date.now();
+
+          let targetCard = card;
+          if (overwrite || newPath === path) {
+            card.dataset.imgSrc = bustedImgSrc;
+            const thumb = card.querySelector('.card-img img');
+            if (thumb) thumb.src = bustedImgSrc;
+          } else {
+            const existingIdx = cards.findIndex(c => c.dataset.path === newPath);
+            if (existingIdx !== -1) {
+              targetCard = cards[existingIdx];
+              targetCard.dataset.imgSrc = bustedImgSrc;
+              const thumb = targetCard.querySelector('.card-img img');
+              if (thumb) thumb.src = bustedImgSrc;
+              currentCardIndex = existingIdx;
+            } else {
+              const filename = newPath.split('/').pop();
+              const newCard = document.createElement('div');
+              newCard.className = 'card';
+              newCard.dataset.path = newPath;
+              newCard.dataset.dir = card.dataset.dir;
+              newCard.dataset.imgSrc = bustedImgSrc;
+
+              const cbContainer = document.createElement('div');
+              cbContainer.className = 'card-checkbox-container';
+              const cbInput = document.createElement('input');
+              cbInput.type = 'checkbox';
+              cbInput.className = 'card-checkbox';
+              cbInput.dataset.path = newPath;
+              cbContainer.appendChild(cbInput);
+
+              const cardImgDiv = document.createElement('div');
+              cardImgDiv.className = 'card-img';
+              const imgEl = document.createElement('img');
+              imgEl.src = bustedImgSrc;
+              imgEl.loading = 'lazy';
+              imgEl.alt = filename;
+              cardImgDiv.appendChild(imgEl);
+
+              const nameP = document.createElement('p');
+              nameP.className = 'name';
+              nameP.title = newPath;
+              nameP.textContent = filename;
+
+              newCard.appendChild(cbContainer);
+              newCard.appendChild(cardImgDiv);
+              newCard.appendChild(nameP);
+
+              bindCardEvents(newCard);
+              card.insertAdjacentElement('afterend', newCard);
+              cards.splice(currentCardIndex + 1, 0, newCard);
+              currentCardIndex = currentCardIndex + 1;
+              targetCard = newCard;
+            }
+          }
+
           exitCropMode();
-          location.reload();
+          updateModalContent();
+          toggleCardSelection(targetCard, true);
         } else {
           alert('Failed to crop image: ' + data.message);
         }
@@ -662,6 +759,7 @@
       }
       lastSelectedCard = card;
       updateSelectionBar();
+      updateModalSelectionState();
     }
 
     function handleRangeSelection(targetCard) {

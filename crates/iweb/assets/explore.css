@@ -296,6 +296,33 @@
       transform: scale(0.98);
       transition: all 0.2s ease;
     }
+    .modal-select-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      user-select: none;
+    }
+    .modal-select-btn .card-checkbox {
+      width: 16px;
+      height: 16px;
+      box-shadow: none;
+      flex-shrink: 0;
+    }
+    .modal-select-btn .card-checkbox:checked::after {
+      width: 4px;
+      height: 8px;
+      top: 1px;
+      left: 4px;
+    }
+    .modal-select-btn.selected {
+      background: rgba(124, 106, 247, 0.22);
+      border-color: #7c6af7;
+      color: #fff;
+    }
+    .modal-select-btn.selected:hover {
+      background: #7c6af7;
+      color: #fff;
+    }
     .selection-bar {
       position: fixed;
       bottom: -100px;
