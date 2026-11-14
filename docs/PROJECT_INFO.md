@@ -36,7 +36,7 @@ Workspace with five crates:
 idup/                      # Workspace root
 ├── Cargo.toml             # Workspace manifest (defines members and shared metadata)
 ├── Cargo.lock             # Locked dependency tree
-├── README.md              # Brief description and perf notes
+├── README.md              # Project overview, feature pitch, quick start, and perf notes
 ├── docs/
 │   └── PROJECT_INFO.md    # This file
 ├── crates/
