@@ -22,7 +22,8 @@ The name is short for **image duplicates**.
 | Exact hash (optional) | Hand-rolled SHA-256 (kept for reference) |
 | Logging | env_logger 0.11.8 (controlled via `RUST_LOG`) |
 | Web server | axum 0.8 |
-| Web UI | htmx 2.0 (CDN), hand-written HTML/CSS |
+| Web templates | askama 0.12 |
+| Web UI | htmx 2.0 (CDN), hand-written HTML/CSS/JS |
 | Browser launching | open 5 |
 
 ---
@@ -56,14 +57,25 @@ idup/                      # Workspace root
 │   │       └── update/
 │   │           └── mod.rs # Image hash validation and refresh
 │   │
-│   ├── iweb/              # Standalone web UI binary (depends on idup as a library)
+│   ├── iweb/              # Standalone web UI binary (depends on idup, ivid, icrop)
 │   │   ├── Cargo.toml     # iweb crate manifest
 │   │   ├── assets/
-│   │   │   ├── index.html # Main web UI (SPA using htmx)
-│   │   │   └── style.css  # Shared stylesheet for web UI
+│   │   │   ├── index.html   # Main web UI (SPA using htmx)
+│   │   │   ├── style.css    # Shared stylesheet for main SPA
+│   │   │   ├── explore.css  # Stylesheet for /explore browser, modals, and crop editor
+│   │   │   └── explore.js   # Client-side logic for /explore (modal, crop, multi-select)
+│   │   ├── templates/
+│   │   │   ├── explore.html    # Askama template for /explore page
+│   │   │   ├── error_page.html # Askama error page template
+│   │   │   ├── partials/       # Modal, move modal, and selection bar partials
+│   │   │   └── fragments/      # htmx HTML response fragments
 │   │   └── src/
-│   │       ├── main.rs    # CLI entry point, Axum router setup, server startup
-│   │       └── handlers.rs # HTTP handlers for all routes
+│   │       ├── main.rs      # CLI entry point and server startup
+│   │       ├── router.rs    # Centralized Axum route registry
+│   │       ├── state.rs     # Shared application state
+│   │       ├── error.rs     # Unified AppError type
+│   │       ├── handlers/    # Thin HTTP handlers per route group
+│   │       └── services/    # Business logic (explore, crop, file ops)
 │   │
 │   ├── igen/              # Performance test image generator
 │   │   ├── Cargo.toml     # igen crate manifest (minimal deps: just `image`)
@@ -79,7 +91,7 @@ idup/                      # Workspace root
 │   │       ├── extract.rs # Frame extraction logic (single-command time + frame modes)
 │   │       └── time.rs    # HH:MM:SS parsing utilities
 │   │
-│   └── icrop/             # (Planned) Image rotation and cropping CLI and library
+│   └── icrop/             # Image rotation and cropping CLI and library
 │       ├── Cargo.toml     # icrop crate manifest (defines lib and bin targets)
 │       └── src/
 │           ├── lib.rs     # Library root — rotation and crop algorithms
@@ -147,6 +159,7 @@ Key public functions:
 | `random_images_seeded(pool, n, filter, seed)` | Returns N images in deterministic pseudo-random order; same seed+filter = same result |
 | `images_in_dir(pool, dir)` | Returns direct (non-recursive) image children of `dir` |
 | `subdirs_in_dir(pool, dir)` | Returns full paths of immediate subdirectories of `dir` that contain images |
+| `next_sibling_dir(pool, dir)` | Returns the next sibling directory of `dir` in alphabetical order (without wrapping around) |
 | `images_matching_filter_in_dir(pool, dir, filter)` | Returns images matching a glob filter, optionally scoped to `dir` |
 | `save(pool, img)` | Upserts an image and its hash |
 | `save_image_hashes(pool, path, hashes)` | Clears and saves all hashes for a path in a single transaction (batch operation) |
@@ -172,19 +185,22 @@ Routes:
 
 | Route | Handler | Description |
 |---|---|---|
-| `GET /` | `index` | Main SPA (index.html) |
-| `GET /style.css` | `style` | Shared stylesheet |
-| `POST /api/scan` | `scan` | Run a scan and return result fragment |
-| `POST /api/extract` | `extract` | Run frame extraction and return result fragment |
-| `POST /api/update` | `update` | Run an update and return result fragment |
-| `GET /api/list` | `list` | List duplicate groups (htmx fragment); group headers link to `/explore?hash=` |
-| `GET /api/info` | `info` | pHash + SHA-256 for a single file |
-| `GET /api/random` | `random` | N seeded-random paths; includes "View All in Browser" button linking to `/explore` |
-| `GET /api/image` | `image_file` | Serve a local image by absolute path (DB-gated) |
-| `GET /explore` | `explore` | Unified standalone image browser; accepts ?dir=, ?filter=, ?hash=, or ?seed=&n= |
-| `POST /api/clean` | `clean` | Wipe all data from the database (images, hashes, partial hashes) |
-| `POST /api/explore/delete` | `explore_delete` | Delete multiple selected images on disk and DB |
-| `POST /api/explore/move` | `explore_move` | Move multiple selected images on disk and DB (supports rename, overwrite, skip) |
+| `GET /` | `assets::index` | Main SPA (index.html) |
+| `GET /style.css` | `assets::style` | Shared stylesheet for main SPA |
+| `GET /explore.css` | `assets::explore_css` | Stylesheet for `/explore` page |
+| `GET /explore.js` | `assets::explore_js` | Client-side script for `/explore` page |
+| `POST /api/scan` | `scan::scan` | Run a scan and return result fragment |
+| `POST /api/extract` | `extract::extract` | Run frame extraction and return result fragment |
+| `POST /api/update` | `update::update` | Run an update and return result fragment |
+| `GET /api/list` | `list::list` | List duplicate groups (htmx fragment); group headers link to `/explore?hash=` |
+| `GET /api/info` | `info::info` | pHash + SHA-256 for a single file |
+| `GET /api/random` | `random::random` | N seeded-random paths; includes "View All in Browser" button linking to `/explore` |
+| `GET /api/image` | `image::image_file` | Serve a local image by absolute path (DB-gated) |
+| `GET /explore` | `explore::explore` | Unified standalone image browser; accepts ?dir=, ?filter=, ?hash=, or ?seed=&n= |
+| `POST /api/clean` | `clean::clean` | Wipe all data from the database (images, hashes, partial hashes) |
+| `POST /api/crop` | `crop::crop` | Rotate and crop an image (in-place or as new file) and re-scan into DB |
+| `POST /api/explore/delete` | `file_ops::explore_delete` | Delete multiple selected images on disk and DB |
+| `POST /api/explore/move` | `file_ops::explore_move` | Move multiple selected images on disk and DB (supports rename, overwrite, skip) |
 | `GET /api/vid2img/list` | `vid2img::list` | List active video reviews |
 | `GET /api/vid2img/check_dir` | `vid2img::check_dir` | Check if a local directory exists |
 | `POST /api/vid2img/upload` | `vid2img::upload` | Upload video(s) and extract initial frames |
@@ -242,7 +258,7 @@ The `iweb` binary starts a local HTTP server. The UI has panels for each CLI ope
 - **Clean panel**: Wipes the entire database. A browser `confirm()` dialog (via htmx `hx-confirm`) prompts the user before the request is sent.
 - **Explore panel**: Opens `/explore` in a new tab with optional starting directory and glob filter.
 - **Explore page** (`/explore`): Unified standalone image browser. Accepts:
-  - `?dir=<path>` — directory browser showing subdirectory cards + images in the current dir, with breadcrumb navigation
+  - `?dir=<path>` — directory browser showing subdirectory cards + images in the current dir, with breadcrumb navigation and a "Next Dir →" button to jump to the next sibling directory in alphabetical order (does not wrap around)
   - `?filter=<glob>` — shows all images in the DB matching the glob (optionally scoped with `?dir=`)
   - `?hash=<group_hash>` — shows all images in a duplicate group (used by the dups panel)
   - `?seed=<u64>&n=<u32>&filter=<glob>` — deterministic random N images (used by the random panel)
