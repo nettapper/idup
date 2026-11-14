@@ -44,6 +44,8 @@ struct ExploreTemplate {
     filter_value: String,
     breadcrumbs: Vec<Breadcrumb>,
     show_breadcrumbs: bool,
+    next_dir_href: Option<String>,
+    next_dir_name: String,
     subdirs: Vec<SubdirEntry>,
     images: Vec<ImageEntry>,
     show_headers: bool,
@@ -144,12 +146,29 @@ pub async fn explore(
         }
     }).collect::<Vec<_>>();
 
+    let (next_dir_href, next_dir_name) = match data.next_dir {
+        Some(ref nd) => {
+            let href = match filter {
+                Some(f) => format!("/explore?dir={}&filter={}", url_encode(nd), url_encode(f)),
+                None => format!("/explore?dir={}", url_encode(nd)),
+            };
+            let name = Path::new(nd)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| nd.clone());
+            (Some(href), name)
+        }
+        None => (None, String::new()),
+    };
+
     let tmpl = ExploreTemplate {
         title: data.title,
         dir_value,
         filter_value,
         breadcrumbs,
         show_breadcrumbs,
+        next_dir_href,
+        next_dir_name,
         subdirs,
         images,
         show_headers,

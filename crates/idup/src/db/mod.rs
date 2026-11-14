@@ -245,6 +245,25 @@ pub async fn subdirs_in_dir(pool: &SqlitePool, dir: &str) -> Result<Vec<String>,
     Ok(seen.into_iter().collect())
 }
 
+/// Returns the next sibling directory of `dir` in alphabetical order (matching `subdirs_in_dir`
+/// of the parent directory), or `None` if `dir` is root or is the last sibling directory
+/// (does not wrap around).
+pub async fn next_sibling_dir(
+    pool: &SqlitePool,
+    dir: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let trimmed = dir.trim_end_matches('/');
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    let parent = match Path::new(trimmed).parent().and_then(|p| p.to_str()) {
+        Some(p) if !p.is_empty() => p,
+        _ => return Ok(None),
+    };
+    let siblings = subdirs_in_dir(pool, parent).await?;
+    Ok(siblings.into_iter().find(|s| s.as_str() > trimmed))
+}
+
 /// Returns all images matching a glob `filter`, optionally scoped to paths under `dir`.
 pub async fn images_matching_filter_in_dir(
     pool: &SqlitePool,
@@ -845,6 +864,54 @@ mod tests {
             .fetch_one(&pool)
             .await?;
         assert_eq!(final_hash, "33334444");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_next_sibling_dir() -> sqlx::Result<()> {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await?;
+
+        setup_db(&pool).await?;
+
+        for path in [
+            "/tmp/ivid_extract/dir_b/img1.jpg",
+            "/tmp/ivid_extract/dir_a/img2.jpg",
+            "/tmp/ivid_extract/dir_c/nested/img3.jpg",
+        ] {
+            let hash = ImgHash {
+                path: PathBuf::from(path),
+                kind: ImgHashKind::Sha256("imgdata".to_string()),
+                hash: "11112222".to_string(),
+            };
+            save(&pool, &hash).await?;
+        }
+
+        // Alphabetical order: dir_a -> dir_b -> dir_c -> None (no wrap around)
+        assert_eq!(
+            next_sibling_dir(&pool, "/tmp/ivid_extract/dir_a").await?,
+            Some("/tmp/ivid_extract/dir_b".to_string())
+        );
+        assert_eq!(
+            next_sibling_dir(&pool, "/tmp/ivid_extract/dir_b").await?,
+            Some("/tmp/ivid_extract/dir_c".to_string())
+        );
+        assert_eq!(
+            next_sibling_dir(&pool, "/tmp/ivid_extract/dir_c").await?,
+            None
+        );
+
+        // Trailing slash is normalized
+        assert_eq!(
+            next_sibling_dir(&pool, "/tmp/ivid_extract/dir_a/").await?,
+            Some("/tmp/ivid_extract/dir_b".to_string())
+        );
+
+        // Root directory has no parent/siblings
+        assert_eq!(next_sibling_dir(&pool, "/").await?, None);
 
         Ok(())
     }

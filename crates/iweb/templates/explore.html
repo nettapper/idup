@@ -18,16 +18,23 @@
   
   {% if show_breadcrumbs %}
   <nav class="breadcrumb">
-    {% for crumb in breadcrumbs %}
-      {% if let Some(href) = crumb.href %}
-        <a href="{{ href }}">{{ crumb.label }}</a>
-      {% else %}
-        <span class="current">{{ crumb.label }}</span>
-      {% endif %}
-      {% if !loop.last %}
-        <span class="sep">/</span>
-      {% endif %}
-    {% endfor %}
+    <div class="breadcrumb-trail">
+      {% for crumb in breadcrumbs %}
+        {% if let Some(href) = crumb.href %}
+          <a href="{{ href }}">{{ crumb.label }}</a>
+        {% else %}
+          <span class="current">{{ crumb.label }}</span>
+        {% endif %}
+        {% if !loop.last %}
+          <span class="sep">/</span>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% if let Some(href) = next_dir_href %}
+      <a href="{{ href }}" class="next-dir-btn" title="Next: {{ next_dir_name }}">Next Dir &rarr;</a>
+    {% else %}
+      <span class="next-dir-btn disabled" title="No next directory">Next Dir &rarr;</span>
+    {% endif %}
   </nav>
   {% endif %}
   

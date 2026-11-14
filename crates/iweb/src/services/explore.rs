@@ -4,6 +4,7 @@ use sqlx::SqlitePool;
 pub struct ExploreData {
     pub title: String,
     pub dir: Option<String>,
+    pub next_dir: Option<String>,
     pub filter: Option<String>,
     pub subdirs: Vec<String>,
     pub paths: Vec<String>,
@@ -31,6 +32,7 @@ pub async fn fetch_explore_data(
         return Ok(ExploreData {
             title,
             dir: None,
+            next_dir: None,
             filter: None,
             subdirs: Vec::new(),
             paths,
@@ -51,6 +53,7 @@ pub async fn fetch_explore_data(
         return Ok(ExploreData {
             title,
             dir: None,
+            next_dir: None,
             filter: filter.map(|f| f.to_string()),
             subdirs: Vec::new(),
             paths,
@@ -58,11 +61,21 @@ pub async fn fetch_explore_data(
     }
 
     if let Some(f) = filter {
-        let paths = idup::db::images_matching_filter_in_dir(pool, dir, f)
-            .await?
+        let (paths_res, next_dir_res) = tokio::join!(
+            idup::db::images_matching_filter_in_dir(pool, dir, f),
+            async {
+                if let Some(d) = dir {
+                    idup::db::next_sibling_dir(pool, d).await
+                } else {
+                    Ok(None)
+                }
+            }
+        );
+        let paths = paths_res?
             .into_iter()
             .map(|d| d.path)
             .collect::<Vec<_>>();
+        let next_dir = next_dir_res?;
         let title = if let Some(d) = dir {
             format!("Explore — {} in {}", f, d)
         } else {
@@ -71,6 +84,7 @@ pub async fn fetch_explore_data(
         return Ok(ExploreData {
             title,
             dir: dir.map(|d| d.to_string()),
+            next_dir,
             filter: Some(f.to_string()),
             subdirs: Vec::new(),
             paths,
@@ -78,19 +92,22 @@ pub async fn fetch_explore_data(
     }
 
     if let Some(d) = dir {
-        let (subdirs_res, images_res) = tokio::join!(
+        let (subdirs_res, images_res, next_dir_res) = tokio::join!(
             idup::db::subdirs_in_dir(pool, d),
             idup::db::images_in_dir(pool, d),
+            idup::db::next_sibling_dir(pool, d),
         );
         let subdirs = subdirs_res?;
         let paths = images_res?
             .into_iter()
             .map(|d| d.path)
             .collect::<Vec<_>>();
+        let next_dir = next_dir_res?;
         let title = format!("Explore — {d}");
         return Ok(ExploreData {
             title,
             dir: Some(d.to_string()),
+            next_dir,
             filter: None,
             subdirs,
             paths,
@@ -111,6 +128,7 @@ pub async fn fetch_explore_data(
     Ok(ExploreData {
         title: "Explore".to_string(),
         dir: Some(d.to_string()),
+        next_dir: None,
         filter: None,
         subdirs,
         paths,
